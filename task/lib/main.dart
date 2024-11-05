@@ -36,9 +36,11 @@ class _TaskManagementAppState extends State<TaskManagementApp> {
 
   void _scheduleNotification(Task task) async {
     var androidDetails = AndroidNotificationDetails(
-      'task_channel_id',
-      'Task Notifications',
-      'Channel for task reminders',
+      'task_channel_id', // Channel ID
+      'Task Notifications', // Channel Name
+      channelDescription: 'Channel for task reminders', // Channel Description
+      importance: Importance.max,
+      priority: Priority.high,
     );
     var notificationDetails = NotificationDetails(android: androidDetails);
 
