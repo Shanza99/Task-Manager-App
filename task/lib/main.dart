@@ -1,51 +1,61 @@
 import 'package:flutter/material.dart';
+import 'package:path_provider/path_provider.dart';
+import 'dart:io';
+import 'package:csv/csv.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+
+import 'task.dart';
 import 'today_tasks.dart';
 import 'completed_tasks.dart';
 import 'repeated_tasks.dart';
-import 'task.dart';
 
-void main() {
-  runApp(TaskManagementApp());
-}
+void main() => runApp(TaskManagementApp());
 
-class TaskManagementApp extends StatelessWidget {
+class TaskManagementApp extends StatefulWidget {
   @override
-  Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Task Management App',
-      theme: ThemeData(
-        primarySwatch: Colors.blue,
-      ),
-      home: TaskManagementHomePage(),
-    );
-  }
+  _TaskManagementAppState createState() => _TaskManagementAppState();
 }
 
-class TaskManagementHomePage extends StatefulWidget {
-  @override
-  _TaskManagementHomePageState createState() => _TaskManagementHomePageState();
-}
-
-class _TaskManagementHomePageState extends State<TaskManagementHomePage> {
-  List<Task> tasks = []; // List to store tasks
-  int _selectedIndex = 0;
-
-  late List<Widget> _pages; // Initialize the pages list later
+class _TaskManagementAppState extends State<TaskManagementApp> {
+  bool _isDarkMode = false;
+  final List<Task> tasks = [];
+  late FlutterLocalNotificationsPlugin _flutterLocalNotificationsPlugin;
 
   @override
   void initState() {
     super.initState();
-    _pages = <Widget>[
-      TodayTasks(tasks: tasks),
-      CompletedTasks(tasks: tasks),
-      RepeatedTasks(tasks: tasks),
-    ];
+    _flutterLocalNotificationsPlugin = FlutterLocalNotificationsPlugin();
+    _initializeNotifications();
   }
 
-  void _onItemTapped(int index) {
+  void _initializeNotifications() async {
+    var initializationSettingsAndroid = AndroidInitializationSettings('@mipmap/ic_launcher');
+    var initializationSettings = InitializationSettings(android: initializationSettingsAndroid);
+    await _flutterLocalNotificationsPlugin.initialize(initializationSettings);
+  }
+
+  void _scheduleNotification(Task task) async {
+    var androidDetails = AndroidNotificationDetails(
+      'task_channel_id',
+      'Task Notifications',
+      'Channel for task reminders',
+    );
+    var notificationDetails = NotificationDetails(android: androidDetails);
+
+    await _flutterLocalNotificationsPlugin.schedule(
+      task.hashCode,
+      task.title,
+      task.description,
+      task.dueDate,
+      notificationDetails,
+    );
+  }
+
+  void _addTask(Task task) {
     setState(() {
-      _selectedIndex = index;
+      tasks.add(task);
     });
+    _scheduleNotification(task);
   }
 
   void _showAddTaskDialog(BuildContext context) {
@@ -54,6 +64,7 @@ class _TaskManagementHomePageState extends State<TaskManagementHomePage> {
     DateTime? _selectedDate;
     bool _isCompleted = false;
     bool _isRepeated = false;
+    List<String> _subtasks = [];
 
     showDialog(
       context: context,
@@ -102,6 +113,14 @@ class _TaskManagementHomePageState extends State<TaskManagementHomePage> {
                     });
                   },
                 ),
+                TextField(
+                  decoration: InputDecoration(labelText: 'Add Subtask'),
+                  onSubmitted: (subtask) {
+                    setState(() {
+                      _subtasks.add(subtask);
+                    });
+                  },
+                ),
               ],
             ),
           ),
@@ -116,15 +135,15 @@ class _TaskManagementHomePageState extends State<TaskManagementHomePage> {
               child: Text('Add'),
               onPressed: () {
                 if (_taskTitleController.text.isNotEmpty && _selectedDate != null) {
-                  setState(() {
-                    tasks.add(Task(
-                      title: _taskTitleController.text,
-                      description: _taskDescriptionController.text,
-                      dueDate: _selectedDate!,
-                      isCompleted: _isCompleted,
-                      isRepeated: _isRepeated,
-                    ));
-                  });
+                  _addTask(Task(
+                    title: _taskTitleController.text,
+                    description: _taskDescriptionController.text,
+                    dueDate: _selectedDate!,
+                    isCompleted: _isCompleted,
+                    isRepeated: _isRepeated,
+                    subtasks: _subtasks,
+                    completedSubtasks: 0,
+                  ));
                 }
                 Navigator.of(context).pop();
               },
@@ -135,34 +154,66 @@ class _TaskManagementHomePageState extends State<TaskManagementHomePage> {
     );
   }
 
+  void exportToCSV() async {
+    List<List<String>> rows = [
+      ["Title", "Description", "Due Date", "Status"],
+    ];
+
+    for (Task task in tasks) {
+      List<String> row = [];
+      row.add(task.title);
+      row.add(task.description);
+      row.add(task.dueDate.toString());
+      row.add(task.isCompleted ? "Completed" : "Incomplete");
+      rows.add(row);
+    }
+
+    String csv = const ListToCsvConverter().convert(rows);
+
+    final directory = await getApplicationDocumentsDirectory();
+    final path = "${directory.path}/tasks.csv";
+    final file = File(path);
+    await file.writeAsString(csv);
+
+    print("Tasks exported to $path");
+  }
+
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: Text('Task Management App'),
-      ),
-      body: _pages[_selectedIndex],
-      floatingActionButton: FloatingActionButton(
-        onPressed: () => _showAddTaskDialog(context),
-        child: Icon(Icons.add),
-      ),
-      bottomNavigationBar: BottomNavigationBar(
-        items: const <BottomNavigationBarItem>[
-          BottomNavigationBarItem(
-            icon: Icon(Icons.today),
-            label: 'Today',
+    return MaterialApp(
+      title: 'Task Management App',
+      theme: _isDarkMode ? ThemeData.dark() : ThemeData.light(),
+      home: Scaffold(
+        appBar: AppBar(
+          title: Text('Task Management App'),
+          actions: [
+            IconButton(
+              icon: Icon(Icons.brightness_6),
+              onPressed: () {
+                setState(() {
+                  _isDarkMode = !_isDarkMode;
+                });
+              },
+            ),
+            IconButton(
+              icon: Icon(Icons.download),
+              onPressed: exportToCSV,
+            ),
+          ],
+        ),
+        body: Center(
+          child: Column(
+            children: <Widget>[
+              Expanded(child: TodayTasks(tasks: tasks)),
+              Expanded(child: CompletedTasks(tasks: tasks)),
+              Expanded(child: RepeatedTasks(tasks: tasks)),
+            ],
           ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.check_circle),
-            label: 'Completed',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.repeat),
-            label: 'Repeated',
-          ),
-        ],
-        currentIndex: _selectedIndex,
-        onTap: _onItemTapped,
+        ),
+        floatingActionButton: FloatingActionButton(
+          onPressed: () => _showAddTaskDialog(context),
+          child: Icon(Icons.add),
+        ),
       ),
     );
   }
