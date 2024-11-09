@@ -107,13 +107,17 @@ class _TaskHomePageState extends State<TaskHomePage> with SingleTickerProviderSt
     await prefs.setStringList('tasks', taskList);
   }
 
-  Future<void> _loadTasksFromSharedPreferences() async {
-    SharedPreferences prefs = await SharedPreferences.getInstance();
-    List<String>? taskList = prefs.getStringList('tasks');
-    setState(() {
-      _tasks = taskList != null ? taskList.map((task) => jsonDecode(task)).toList() : [];
-    });
-  }
+Future<void> _loadTasksFromSharedPreferences() async {
+  SharedPreferences prefs = await SharedPreferences.getInstance();
+  List<String>? taskList = prefs.getStringList('tasks');
+  
+  setState(() {
+    _tasks = taskList != null 
+      ? taskList.map((task) => Map<String, dynamic>.from(jsonDecode(task))).toList() 
+      : [];
+  });
+}
+
 
   void _showAddTaskDialog(BuildContext context) {
     final titleController = TextEditingController();
