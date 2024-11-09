@@ -40,19 +40,29 @@ class _TaskHomePageState extends State<TaskHomePage> with SingleTickerProviderSt
     if (!isWeb) {
       _initializeNotifications(); // Initialize notifications for mobile/desktop
     }
-    _loadDummyTasks(); // Load dummy tasks for testing
+    _loadDummyTasks();
+    _scheduleNotifications();
   }
 
-  // Initialize local notifications for mobile/desktop platforms
   void _initializeNotifications() {
     flutterLocalNotificationsPlugin = FlutterLocalNotificationsPlugin();
     var initializationSettingsAndroid = AndroidInitializationSettings('app_icon');
-    var initializationSettings = InitializationSettings(
-        android: initializationSettingsAndroid);
+    var initializationSettings = InitializationSettings(android: initializationSettingsAndroid);
     flutterLocalNotificationsPlugin!.initialize(initializationSettings);
   }
 
-  // Function for triggering web notifications
+  void _showDesktopNotification(String title, String body) {
+    var androidDetails = AndroidNotificationDetails(
+      'task_channel_id',
+      'Task Notifications',
+      channelDescription: 'Channel for task notifications',
+      importance: Importance.high,
+      priority: Priority.high,
+    );
+    var generalNotificationDetails = NotificationDetails(android: androidDetails);
+    flutterLocalNotificationsPlugin!.show(0, title, body, generalNotificationDetails);
+  }
+
   void showWebNotification(String title, String body) {
     if (html.Notification.permission == "granted") {
       html.Notification(title, body: body);
@@ -65,7 +75,22 @@ class _TaskHomePageState extends State<TaskHomePage> with SingleTickerProviderSt
     }
   }
 
-  // Dummy function to load tasks (for testing purposes)
+  void _scheduleNotifications() {
+    _tasks.forEach((task) {
+      DateTime dueDate = DateTime.parse(task['dueDate']);
+      if (dueDate.isAfter(DateTime.now())) {
+        Duration difference = dueDate.difference(DateTime.now());
+        Future.delayed(difference, () {
+          if (isWeb) {
+            showWebNotification("Task Reminder: ${task['title']}", "Your task is due now.");
+          } else {
+            _showDesktopNotification("Task Reminder: ${task['title']}", "Your task is due now.");
+          }
+        });
+      }
+    });
+  }
+
   void _loadDummyTasks() {
     _tasks = [
       {
@@ -74,7 +99,7 @@ class _TaskHomePageState extends State<TaskHomePage> with SingleTickerProviderSt
         'description': 'Complete project report',
         'dueDate': DateTime.now().add(Duration(seconds: 10)).toIso8601String(),
         'isCompleted': false,
-        'repeatDays': 'daily', // Repeats every day
+        'repeatDays': 'daily',
       },
       {
         'id': 2,
@@ -82,7 +107,7 @@ class _TaskHomePageState extends State<TaskHomePage> with SingleTickerProviderSt
         'description': 'Call client',
         'dueDate': DateTime.now().add(Duration(seconds: 20)).toIso8601String(),
         'isCompleted': false,
-        'repeatDays': 'weekly', // Repeats every week
+        'repeatDays': 'weekly',
       },
       {
         'id': 3,
@@ -90,68 +115,11 @@ class _TaskHomePageState extends State<TaskHomePage> with SingleTickerProviderSt
         'description': 'Submit monthly report',
         'dueDate': DateTime.now().add(Duration(seconds: 30)).toIso8601String(),
         'isCompleted': false,
-        'repeatDays': 'monthly', // Repeats every month
+        'repeatDays': 'monthly',
       },
     ];
   }
 
-  // Filter tasks for repeated tasks
-  List<Map<String, dynamic>> _getRepeatedTasks() {
-    return _tasks.where((task) {
-      return task['repeatDays'] != null &&
-          task['repeatDays'] != '' &&
-          task['repeatDays'] != 'once'; // Exclude once tasks
-    }).toList();
-  }
-
-  // Function to check if task is due today and show notification
-  void _checkIfTaskIsDueToday(Map<String, dynamic> task) {
-    DateTime now = DateTime.now();
-    DateTime taskDueDate = DateTime.parse(task['dueDate']);
-
-    // Compare only the year, month, and day (ignore time portion)
-    if (taskDueDate.year == now.year &&
-        taskDueDate.month == now.month &&
-        taskDueDate.day == now.day) {
-      if (task['repeatDays'] != null) {
-        // If the task repeats, add logic to show repeated task notification
-        if (task['repeatDays'] == 'daily') {
-          _showNotificationForRepeatedTask(task);
-        }
-      }
-    }
-  }
-
-  // Function to show notification for repeated tasks
-  void _showNotificationForRepeatedTask(Map<String, dynamic> task) {
-    if (isWeb) {
-      showWebNotification(
-        "Repeated Task: ${task['title']}",
-        "Your task is due today: ${task['description']}",
-      );
-    } else {
-      _showDesktopNotification(
-        "Repeated Task: ${task['title']}",
-        "Your task is due today: ${task['description']}",
-      );
-    }
-  }
-
-  // Function to show desktop notification (Flutter Local Notifications)
-  void _showDesktopNotification(String title, String body) {
-    var androidDetails = AndroidNotificationDetails(
-      'task_channel_id',
-      'Task Notifications',
-      channelDescription: 'Channel for task notifications',
-      importance: Importance.high,
-      priority: Priority.high,
-    );
-    var generalNotificationDetails = NotificationDetails(android: androidDetails);
-    flutterLocalNotificationsPlugin!
-        .show(0, title, body, generalNotificationDetails);
-  }
-
-  // Fetch tasks for different tabs
   List<Map<String, dynamic>> _getTasksForToday() {
     final today = DateTime.now();
     return _tasks.where((task) {
@@ -159,12 +127,20 @@ class _TaskHomePageState extends State<TaskHomePage> with SingleTickerProviderSt
       return dueDate.year == today.year &&
           dueDate.month == today.month &&
           dueDate.day == today.day &&
-          task['isCompleted'] == 0;
+          task['isCompleted'] == false;
     }).toList();
   }
 
   List<Map<String, dynamic>> _getCompletedTasks() {
-    return _tasks.where((task) => task['isCompleted'] == 1).toList();
+    return _tasks.where((task) => task['isCompleted'] == true).toList();
+  }
+
+  List<Map<String, dynamic>> _getRepeatedTasks() {
+    return _tasks.where((task) {
+      return task['repeatDays'] != null &&
+          task['repeatDays'] != '' &&
+          task['repeatDays'] != 'once';
+    }).toList();
   }
 
   @override
@@ -178,7 +154,7 @@ class _TaskHomePageState extends State<TaskHomePage> with SingleTickerProviderSt
             Tab(text: 'All Tasks'),
             Tab(text: 'Today\'s Tasks'),
             Tab(text: 'Completed'),
-            Tab(text: 'Repeated'), // Repeated tab
+            Tab(text: 'Repeated'),
           ],
         ),
       ),
@@ -188,7 +164,7 @@ class _TaskHomePageState extends State<TaskHomePage> with SingleTickerProviderSt
           _buildTaskList(_tasks),
           _buildTaskList(_getTasksForToday()),
           _buildTaskList(_getCompletedTasks()),
-          _buildTaskList(_getRepeatedTasks()), // Show repeated tasks
+          _buildTaskList(_getRepeatedTasks()),
         ],
       ),
       floatingActionButton: FloatingActionButton(
@@ -198,7 +174,6 @@ class _TaskHomePageState extends State<TaskHomePage> with SingleTickerProviderSt
     );
   }
 
-  // Function to build task list
   Widget _buildTaskList(List<Map<String, dynamic>> tasks) {
     return ListView.builder(
       itemCount: tasks.length,
@@ -218,40 +193,16 @@ class _TaskHomePageState extends State<TaskHomePage> with SingleTickerProviderSt
                 icon: Icon(Icons.check),
                 onPressed: () {
                   setState(() {
-                    task['isCompleted'] = 1; // Mark as completed
+                    task['isCompleted'] = true;
                   });
                 },
               ),
               IconButton(
                 icon: Icon(Icons.delete),
                 onPressed: () {
-                  // Show delete confirmation dialog
-                  showDialog(
-                    context: context,
-                    builder: (context) {
-                      return AlertDialog(
-                        title: Text('Delete Task'),
-                        content: Text('Are you sure you want to delete this task?'),
-                        actions: [
-                          TextButton(
-                            onPressed: () {
-                              Navigator.pop(context); // Cancel the deletion
-                            },
-                            child: Text('Cancel'),
-                          ),
-                          TextButton(
-                            onPressed: () {
-                              setState(() {
-                                _tasks.removeAt(index); // Remove task from list
-                              });
-                              Navigator.pop(context); // Close the dialog
-                            },
-                            child: Text('Delete'),
-                          ),
-                        ],
-                      );
-                    },
-                  );
+                  setState(() {
+                    _tasks.removeAt(index);
+                  });
                 },
               ),
             ],
@@ -261,7 +212,6 @@ class _TaskHomePageState extends State<TaskHomePage> with SingleTickerProviderSt
     );
   }
 
-  // Dialog to edit a task
   void _showEditTaskDialog(BuildContext context, Map<String, dynamic> task) {
     final titleController = TextEditingController(text: task['title']);
     final descriptionController = TextEditingController(text: task['description']);
@@ -293,28 +243,25 @@ class _TaskHomePageState extends State<TaskHomePage> with SingleTickerProviderSt
                     lastDate: DateTime(2100),
                   );
                   if (pickedDate != null) {
-                    setState(() {
-                      selectedDate = pickedDate;
-                    });
+                    selectedDate = pickedDate;
                   }
                 },
-                child: Text('Select Due Date'),
+                child: Text('Pick Due Date'),
               ),
-              Text('Repeat Task:'),
               DropdownButton<String>(
                 value: repeatValue,
-                onChanged: (newValue) {
-                  setState(() {
-                    repeatValue = newValue!;
-                  });
-                },
-                items: ['Once', 'Daily', 'Weekly', 'Monthly']
-                    .map<DropdownMenuItem<String>>((String value) {
+                items: <String>['once', 'daily', 'weekly', 'monthly', 'yearly']
+                    .map((String value) {
                   return DropdownMenuItem<String>(
                     value: value,
                     child: Text(value),
                   );
                 }).toList(),
+                onChanged: (String? newValue) {
+                  setState(() {
+                    repeatValue = newValue!;
+                  });
+                },
               ),
             ],
           ),
@@ -325,7 +272,7 @@ class _TaskHomePageState extends State<TaskHomePage> with SingleTickerProviderSt
               },
               child: Text('Cancel'),
             ),
-            TextButton(
+            ElevatedButton(
               onPressed: () {
                 setState(() {
                   task['title'] = titleController.text;
@@ -335,7 +282,7 @@ class _TaskHomePageState extends State<TaskHomePage> with SingleTickerProviderSt
                 });
                 Navigator.pop(context);
               },
-              child: Text('Save'),
+              child: Text('Save Changes'),
             ),
           ],
         );
@@ -343,18 +290,17 @@ class _TaskHomePageState extends State<TaskHomePage> with SingleTickerProviderSt
     );
   }
 
-  // Dialog to add a new task
   void _showAddTaskDialog(BuildContext context) {
     final titleController = TextEditingController();
     final descriptionController = TextEditingController();
     DateTime selectedDate = DateTime.now();
-    String repeatValue = 'Once';
+    String repeatValue = 'once';
 
     showDialog(
       context: context,
       builder: (context) {
         return AlertDialog(
-          title: Text('Add New Task'),
+          title: Text('Add Task'),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -375,28 +321,25 @@ class _TaskHomePageState extends State<TaskHomePage> with SingleTickerProviderSt
                     lastDate: DateTime(2100),
                   );
                   if (pickedDate != null) {
-                    setState(() {
-                      selectedDate = pickedDate;
-                    });
+                    selectedDate = pickedDate;
                   }
                 },
-                child: Text('Select Due Date'),
+                child: Text('Pick Due Date'),
               ),
-              Text('Repeat Task:'),
               DropdownButton<String>(
                 value: repeatValue,
-                onChanged: (newValue) {
-                  setState(() {
-                    repeatValue = newValue!;
-                  });
-                },
-                items: ['Once', 'Daily', 'Weekly', 'Monthly']
-                    .map<DropdownMenuItem<String>>((String value) {
+                items: <String>['once', 'daily', 'weekly', 'monthly', 'yearly']
+                    .map((String value) {
                   return DropdownMenuItem<String>(
                     value: value,
                     child: Text(value),
                   );
                 }).toList(),
+                onChanged: (String? newValue) {
+                  setState(() {
+                    repeatValue = newValue!;
+                  });
+                },
               ),
             ],
           ),
@@ -407,7 +350,7 @@ class _TaskHomePageState extends State<TaskHomePage> with SingleTickerProviderSt
               },
               child: Text('Cancel'),
             ),
-            TextButton(
+            ElevatedButton(
               onPressed: () {
                 setState(() {
                   _tasks.add({
@@ -420,6 +363,7 @@ class _TaskHomePageState extends State<TaskHomePage> with SingleTickerProviderSt
                   });
                 });
                 Navigator.pop(context);
+                _scheduleNotifications(); // Schedule notifications after adding a new task
               },
               child: Text('Add Task'),
             ),
