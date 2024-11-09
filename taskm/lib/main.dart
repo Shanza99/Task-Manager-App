@@ -24,17 +24,24 @@ class TaskHomePage extends StatefulWidget {
   _TaskHomePageState createState() => _TaskHomePageState();
 }
 
-class _TaskHomePageState extends State<TaskHomePage> {
+class _TaskHomePageState extends State<TaskHomePage> with SingleTickerProviderStateMixin {
   Database? _database;
   List<Map<String, dynamic>> _tasks = [];
-  final FlutterLocalNotificationsPlugin _notificationsPlugin =
-      FlutterLocalNotificationsPlugin();
+  late TabController _tabController;
+  final FlutterLocalNotificationsPlugin _notificationsPlugin = FlutterLocalNotificationsPlugin();
 
   @override
   void initState() {
     super.initState();
+    _tabController = TabController(length: 4, vsync: this);
     _initDatabase();
     _initNotifications();
+  }
+
+  @override
+  void dispose() {
+    _tabController.dispose();
+    super.dispose();
   }
 
   Future<void> _initDatabase() async {
@@ -97,7 +104,7 @@ class _TaskHomePageState extends State<TaskHomePage> {
     final android = AndroidNotificationDetails(
       'task_channel', // Channel ID
       'Task Notifications', // Channel name
-      channelDescription: 'Channel for task notifications', // Fixed parameter
+      channelDescription: 'Channel for task notifications',
     );
     final details = NotificationDetails(android: android);
     await _notificationsPlugin.show(0, title, body, details);
@@ -147,31 +154,74 @@ class _TaskHomePageState extends State<TaskHomePage> {
     );
   }
 
+  List<Map<String, dynamic>> _getTasksForToday() {
+    final today = DateTime.now();
+    return _tasks.where((task) {
+      final dueDate = DateTime.parse(task['dueDate']);
+      return dueDate.year == today.year &&
+          dueDate.month == today.month &&
+          dueDate.day == today.day &&
+          task['isCompleted'] == 0;
+    }).toList();
+  }
+
+  List<Map<String, dynamic>> _getCompletedTasks() {
+    return _tasks.where((task) => task['isCompleted'] == 1).toList();
+  }
+
+  List<Map<String, dynamic>> _getRepeatedTasks() {
+    return _tasks.where((task) => task['repeatDays'] != '').toList();
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
         title: Text('Task Manager'),
+        bottom: TabBar(
+          controller: _tabController,
+          tabs: [
+            Tab(text: 'All Tasks'),
+            Tab(text: 'Today\'s Tasks'),
+            Tab(text: 'Completed'),
+            Tab(text: 'Repeated'),
+          ],
+        ),
       ),
-      body: ListView.builder(
-        itemCount: _tasks.length,
-        itemBuilder: (context, index) {
-          final task = _tasks[index];
-          return ListTile(
-            title: Text(task['title']),
-            subtitle: Text(task['description']),
-            trailing: IconButton(
-              icon: Icon(Icons.delete),
-              onPressed: () => _deleteTask(task['id']),
-            ),
-            onTap: () => _showNotification(task['title'], task['description']),
-          );
-        },
+      body: TabBarView(
+        controller: _tabController,
+        children: [
+          _buildTaskList(_tasks),
+          _buildTaskList(_getTasksForToday()),
+          _buildTaskList(_getCompletedTasks()),
+          _buildTaskList(_getRepeatedTasks()),
+        ],
       ),
       floatingActionButton: FloatingActionButton(
-        onPressed: () => _showAddTaskDialog(context), // Pass the context here
+        onPressed: () => _showAddTaskDialog(context),
         child: Icon(Icons.add),
       ),
+    );
+  }
+
+  Widget _buildTaskList(List<Map<String, dynamic>> tasks) {
+    if (tasks.isEmpty) {
+      return Center(child: Text('No tasks available.'));
+    }
+    return ListView.builder(
+      itemCount: tasks.length,
+      itemBuilder: (context, index) {
+        final task = tasks[index];
+        return ListTile(
+          title: Text(task['title']),
+          subtitle: Text(task['description']),
+          trailing: IconButton(
+            icon: Icon(Icons.delete),
+            onPressed: () => _deleteTask(task['id']),
+          ),
+          onTap: () => _showNotification(task['title'], task['description']),
+        );
+      },
     );
   }
 }
