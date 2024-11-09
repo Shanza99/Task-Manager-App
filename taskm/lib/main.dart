@@ -1,12 +1,12 @@
 import 'dart:convert';
 import 'dart:html' as html;
 import 'dart:typed_data';
-
 import 'package:flutter/material.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:csv/csv.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
 void main() {
   runApp(TaskManagerApp());
@@ -30,12 +30,46 @@ class TaskHomePage extends StatefulWidget {
 class _TaskHomePageState extends State<TaskHomePage> with SingleTickerProviderStateMixin {
   List<Map<String, dynamic>> _tasks = [];
   late TabController _tabController;
+  FlutterLocalNotificationsPlugin? _flutterLocalNotificationsPlugin;
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 4, vsync: this);
+    _flutterLocalNotificationsPlugin = FlutterLocalNotificationsPlugin();
+    _initializeNotifications();
     _loadDummyTasks();
+  }
+
+  // Initialize local notifications
+  Future<void> _initializeNotifications() async {
+    const initializationSettingsAndroid = AndroidInitializationSettings('app_icon');
+    const initializationSettings = InitializationSettings(android: initializationSettingsAndroid);
+
+    await _flutterLocalNotificationsPlugin?.initialize(initializationSettings);
+  }
+
+  // Schedule local notification for task
+  Future<void> _scheduleNotification(Map<String, dynamic> task) async {
+    DateTime dueDate = DateTime.parse(task['dueDate']);
+    var scheduledTime = dueDate.subtract(Duration(minutes: 10)); // Set 10 minutes before due date as notification time
+
+    const androidDetails = AndroidNotificationDetails(
+      'task_channel',
+      'Task Notifications',
+      importance: Importance.max,
+      priority: Priority.high,
+    );
+
+    const platformDetails = NotificationDetails(android: androidDetails);
+
+    await _flutterLocalNotificationsPlugin?.schedule(
+      task['id'],
+      'Task Reminder',
+      'Your task "${task['title']}" is due!',
+      scheduledTime,
+      platformDetails,
+    );
   }
 
   // Load dummy tasks for demonstration
@@ -66,6 +100,11 @@ class _TaskHomePageState extends State<TaskHomePage> with SingleTickerProviderSt
         'repeatDays': 'monthly',
       },
     ];
+
+    // Schedule notifications for all tasks
+    for (var task in _tasks) {
+      _scheduleNotification(task);
+    }
   }
 
   // Export tasks to CSV
@@ -241,30 +280,33 @@ class _TaskHomePageState extends State<TaskHomePage> with SingleTickerProviderSt
 
   // Dummy method to get completed tasks
   List<Map<String, dynamic>> _getCompletedTasks() {
-    return _tasks.where((task) => task['isCompleted']).toList();
+    return _tasks.where((task) => task['isCompleted'] == true).toList();
   }
 
   // Dummy method to get repeated tasks
   List<Map<String, dynamic>> _getRepeatedTasks() {
-    return _tasks.where((task) => task['repeatDays'] != null).toList();
+    return _tasks.where((task) => task['repeatDays'] != 'none').toList();
   }
 
-  // Show Add Task Dialog
+  // Show add task dialog
   void _showAddTaskDialog(BuildContext context) {
+    final taskController = TextEditingController();
+    final descriptionController = TextEditingController();
+
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text("Add Task"),
+        title: Text('Add Task'),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             TextField(
+              controller: taskController,
               decoration: InputDecoration(labelText: 'Task Title'),
-              onChanged: (value) {},
             ),
             TextField(
+              controller: descriptionController,
               decoration: InputDecoration(labelText: 'Task Description'),
-              onChanged: (value) {},
             ),
           ],
         ),
@@ -277,34 +319,46 @@ class _TaskHomePageState extends State<TaskHomePage> with SingleTickerProviderSt
           ),
           TextButton(
             onPressed: () {
-              // Add task to list
+              setState(() {
+                _tasks.add({
+                  'id': _tasks.length + 1,
+                  'title': taskController.text,
+                  'description': descriptionController.text,
+                  'dueDate': DateTime.now().add(Duration(days: 1)).toIso8601String(),
+                  'isCompleted': false,
+                  'repeatDays': 'daily',
+                });
+              });
               Navigator.pop(context);
             },
-            child: Text('Add Task'),
+            child: Text('Save'),
           ),
         ],
       ),
     );
   }
 
-  // Show Edit Task Dialog
+  // Show edit task dialog
   void _showEditTaskDialog(BuildContext context, Map<String, dynamic> task) {
+    final taskController = TextEditingController(text: task['title']);
+    final descriptionController = TextEditingController(text: task['description']);
+
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text("Edit Task"),
+        title: Text('Edit Task'),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             TextField(
-              controller: TextEditingController(text: task['title']),
+              controller: taskController,
               decoration: InputDecoration(labelText: 'Task Title'),
               onChanged: (value) {
                 task['title'] = value;
               },
             ),
             TextField(
-              controller: TextEditingController(text: task['description']),
+              controller: descriptionController,
               decoration: InputDecoration(labelText: 'Task Description'),
               onChanged: (value) {
                 task['description'] = value;
@@ -321,7 +375,6 @@ class _TaskHomePageState extends State<TaskHomePage> with SingleTickerProviderSt
           ),
           TextButton(
             onPressed: () {
-              // Save the changes
               setState(() {});
               Navigator.pop(context);
             },
