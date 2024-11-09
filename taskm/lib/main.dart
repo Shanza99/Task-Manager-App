@@ -436,30 +436,4 @@ class _TaskHomePageState extends State<TaskHomePage> with SingleTickerProviderSt
 }
 
 
-Future<void> _scheduleNotification(Map<String, dynamic> task, {int reminderMinutes = 10}) async {
-  if (_flutterLocalNotificationsPlugin == null) {
-    print("FlutterLocalNotificationsPlugin is not initialized!");
-    return;
-  }
-
-  DateTime dueDate = DateTime.parse(task['dueDate']);
-  var scheduledTime = dueDate.subtract(Duration(minutes: reminderMinutes)); // Set custom reminder time
-
-  const androidDetails = AndroidNotificationDetails(
-    'task_channel',
-    'Task Notifications',
-    importance: Importance.max,
-    priority: Priority.high,
-  );
-
-  const platformDetails = NotificationDetails(android: androidDetails);
-
-  await _flutterLocalNotificationsPlugin!.schedule(
-    task['id'],
-    'Task Reminder',
-    'Your task "${task['title']}" is due!',
-    scheduledTime,
-    platformDetails,
-  );
-}
 
