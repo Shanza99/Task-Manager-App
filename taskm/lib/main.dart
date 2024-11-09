@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:html' as html;
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
@@ -29,39 +30,28 @@ class TaskHomePage extends StatefulWidget {
 class _TaskHomePageState extends State<TaskHomePage> with SingleTickerProviderStateMixin {
   List<Map<String, dynamic>> _tasks = [];
   late TabController _tabController;
-  final FlutterLocalNotificationsPlugin _flutterLocalNotificationsPlugin = FlutterLocalNotificationsPlugin();
+  FlutterLocalNotificationsPlugin? _flutterLocalNotificationsPlugin;
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 4, vsync: this);
+    _flutterLocalNotificationsPlugin = FlutterLocalNotificationsPlugin();
     _initializeNotifications();
     _loadDummyTasks();
+    _scheduleTodayTaskNotifications();
   }
 
-  // Initialize local notifications
   Future<void> _initializeNotifications() async {
     const initializationSettingsAndroid = AndroidInitializationSettings('app_icon');
     const initializationSettings = InitializationSettings(android: initializationSettingsAndroid);
 
-    await _flutterLocalNotificationsPlugin.initialize(initializationSettings);
-    
-    // Schedule notification for today's tasks
-    _scheduleTodaysTasksNotifications();
+    await _flutterLocalNotificationsPlugin?.initialize(initializationSettings);
   }
 
-  // Schedule notifications for today's tasks
-  void _scheduleTodaysTasksNotifications() {
-    final todayTasks = _getTasksForToday();
-    for (var task in todayTasks) {
-      _scheduleNotification(task);
-    }
-  }
-
-  // Schedule local notification for a task
   Future<void> _scheduleNotification(Map<String, dynamic> task) async {
     DateTime dueDate = DateTime.parse(task['dueDate']);
-    var scheduledTime = dueDate.subtract(Duration(minutes: 10)); // Set 10 minutes before due date as notification time
+    var scheduledTime = dueDate.subtract(Duration(minutes: 10));
 
     const androidDetails = AndroidNotificationDetails(
       'task_channel',
@@ -72,51 +62,49 @@ class _TaskHomePageState extends State<TaskHomePage> with SingleTickerProviderSt
 
     const platformDetails = NotificationDetails(android: androidDetails);
 
-    await _flutterLocalNotificationsPlugin.schedule(
-      task['id'], // Ensure 'id' is a unique integer for each task
+    await _flutterLocalNotificationsPlugin?.schedule(
+      task['id'],
       'Task Reminder',
-      'Your task "${task['title']}" is due!',
+      'Your task "${task['title']}" is due soon!',
       scheduledTime,
       platformDetails,
     );
   }
 
-  // Load dummy tasks for demonstration
   void _loadDummyTasks() {
     _tasks = [
       {
         'id': 1,
         'title': 'Task 1',
         'description': 'Complete project report',
-        'dueDate': DateTime.now().add(Duration(hours: 2)).toIso8601String(),
+        'dueDate': DateTime.now().add(Duration(hours: 1)).toIso8601String(),
         'isCompleted': false,
-        'repeatDays': 'daily',
+        'repeatDays': 'None',
       },
       {
         'id': 2,
         'title': 'Task 2',
         'description': 'Call client',
-        'dueDate': DateTime.now().add(Duration(days: 2)).toIso8601String(),
+        'dueDate': DateTime.now().add(Duration(days: 1)).toIso8601String(),
         'isCompleted': false,
-        'repeatDays': 'weekly',
-      },
-      {
-        'id': 3,
-        'title': 'Task 3',
-        'description': 'Submit monthly report',
-        'dueDate': DateTime.now().add(Duration(days: 3)).toIso8601String(),
-        'isCompleted': false,
-        'repeatDays': 'monthly',
+        'repeatDays': 'Daily',
       },
     ];
+  }
 
-    // Schedule notifications for all tasks
+  void _scheduleTodayTaskNotifications() {
+    DateTime now = DateTime.now();
     for (var task in _tasks) {
-      _scheduleNotification(task);
+      DateTime taskDueDate = DateTime.parse(task['dueDate']);
+      if (taskDueDate.year == now.year &&
+          taskDueDate.month == now.month &&
+          taskDueDate.day == now.day &&
+          task['isCompleted'] == false) {
+        _scheduleNotification(task);
+      }
     }
   }
 
-  // Export tasks to CSV
   void _exportToCSV() {
     List<List<dynamic>> rows = [
       ["ID", "Title", "Description", "Due Date", "Completed", "Repeat Days"]
@@ -144,7 +132,6 @@ class _TaskHomePageState extends State<TaskHomePage> with SingleTickerProviderSt
     html.Url.revokeObjectUrl(url);
   }
 
-  // Export tasks to PDF
   Future<void> _exportToPDF() async {
     final pdf = pw.Document();
 
@@ -180,9 +167,8 @@ class _TaskHomePageState extends State<TaskHomePage> with SingleTickerProviderSt
     html.Url.revokeObjectUrl(url);
   }
 
-  // Export tasks via email
   void _exportToEmail() {
-    final String email = "example@example.com"; // Change to your email address
+    final String email = "example@example.com"; 
     final String subject = Uri.encodeComponent("Task List");
     final String body = Uri.encodeComponent(_generateTaskListForEmail());
 
@@ -190,7 +176,6 @@ class _TaskHomePageState extends State<TaskHomePage> with SingleTickerProviderSt
     launch(url);
   }
 
-  // Generate task list in string format for email
   String _generateTaskListForEmail() {
     StringBuffer buffer = StringBuffer();
     buffer.writeln("Task List:");
@@ -203,16 +188,6 @@ class _TaskHomePageState extends State<TaskHomePage> with SingleTickerProviderSt
       buffer.writeln();
     }
     return buffer.toString();
-  }
-
-  // Dummy method to get today's tasks
-  List<Map<String, dynamic>> _getTasksForToday() {
-    return _tasks.where((task) {
-      DateTime taskDate = DateTime.parse(task['dueDate']);
-      return taskDate.year == DateTime.now().year &&
-             taskDate.month == DateTime.now().month &&
-             taskDate.day == DateTime.now().day;
-    }).toList();
   }
 
   @override
@@ -255,171 +230,154 @@ class _TaskHomePageState extends State<TaskHomePage> with SingleTickerProviderSt
     return ListView.builder(
       itemCount: tasks.length,
       itemBuilder: (context, index) {
-        final task = tasks[index];
+        var task = tasks[index];
         return ListTile(
           title: Text(task['title']),
           subtitle: Text(task['description']),
-          trailing: Checkbox(
-            value: task['isCompleted'],
-            onChanged: (bool? value) {
-              setState(() {
-                task['isCompleted'] = value ?? false;
-              });
-            },
+          trailing: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              IconButton(icon: Icon(Icons.edit), onPressed: () => _showEditTaskDialog(context, task)),
+              IconButton(
+                icon: Icon(Icons.check),
+                onPressed: () {
+                  setState(() {
+                    task['isCompleted'] = true;
+                  });
+                },
+              ),
+              IconButton(
+                icon: Icon(Icons.delete),
+                onPressed: () {
+                  setState(() {
+                    _tasks.removeAt(index);
+                  });
+                },
+              ),
+            ],
           ),
-          onTap: () => _showEditTaskDialog(context, task),
         );
       },
     );
   }
 
-  // Dummy methods for demo purposes
-  List<Map<String, dynamic>> _getCompletedTasks() => _tasks.where((task) => task['isCompleted']).toList();
-  List<Map<String, dynamic>> _getRepeatedTasks() => _tasks.where((task) => task['repeatDays'] != null).toList();
+  List<Map<String, dynamic>> _getTasksForToday() {
+    return _tasks.where((task) {
+      DateTime taskDate = DateTime.parse(task['dueDate']);
+      return taskDate.year == DateTime.now().year && taskDate.month == DateTime.now().month && taskDate.day == DateTime.now().day;
+    }).toList();
+  }
 
-  
+  List<Map<String, dynamic>> _getCompletedTasks() {
+    return _tasks.where((task) => task['isCompleted'] == true).toList();
+  }
 
-// Show dialog to add a new task
-void _showAddTaskDialog(BuildContext context) {
-  final TextEditingController titleController = TextEditingController();
-  final TextEditingController descriptionController = TextEditingController();
-  final TextEditingController dueDateController = TextEditingController();
-  String? selectedRepeat = 'None';
+  List<Map<String, dynamic>> _getRepeatedTasks() {
+    return _tasks.where((task) => task['repeatDays'] != 'None').toList();
+  }
 
-  showDialog(
-    context: context,
-    builder: (BuildContext context) {
-      return AlertDialog(
-        title: Text("Add Task"),
-        content: SingleChildScrollView(
-          child: Column(
+  void _showAddTaskDialog(BuildContext context) {
+    final titleController = TextEditingController();
+    final descriptionController = TextEditingController();
+    final dueDateController = TextEditingController();
+    String? selectedRepeat = 'None';
+
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: Text("Add Task"),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
             children: [
-              TextField(
-                controller: titleController,
-                decoration: InputDecoration(labelText: 'Task Title'),
-              ),
-              TextField(
-                controller: descriptionController,
-                decoration: InputDecoration(labelText: 'Task Description'),
-              ),
-              TextField(
-                controller: dueDateController,
-                decoration: InputDecoration(labelText: 'Due Date (YYYY-MM-DD HH:MM)'),
-              ),
+              TextField(controller: titleController, decoration: InputDecoration(labelText: 'Title')),
+              TextField(controller: descriptionController, decoration: InputDecoration(labelText: 'Description')),
+              TextField(controller: dueDateController, decoration: InputDecoration(labelText: 'Due Date (YYYY-MM-DD HH:MM)')),
               DropdownButtonFormField<String>(
                 value: selectedRepeat,
+                items: ['None', 'Daily', 'Weekly', 'Monthly']
+                    .map((repeat) => DropdownMenuItem(value: repeat, child: Text(repeat)))
+                    .toList(),
+                onChanged: (newValue) => selectedRepeat = newValue,
                 decoration: InputDecoration(labelText: 'Repeat'),
-                items: ['None', 'Daily', 'Weekly', 'Monthly'].map((String value) {
-                  return DropdownMenuItem<String>(
-                    value: value,
-                    child: Text(value),
-                  );
-                }).toList(),
-                onChanged: (newValue) {
-                  setState(() {
-                    selectedRepeat = newValue;
-                  });
-                },
               ),
             ],
           ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () {
-              Navigator.of(context).pop();
-            },
-            child: Text("Cancel"),
-          ),
-          TextButton(
-            onPressed: () {
-              setState(() {
-                _tasks.add({
-                  'id': _tasks.length + 1, // Simple unique ID for each task
-                  'title': titleController.text,
-                  'description': descriptionController.text,
-                  'dueDate': dueDateController.text,
-                  'isCompleted': false,
-                  'repeatDays': selectedRepeat,
+          actions: [
+            TextButton(onPressed: () => Navigator.of(context).pop(), child: Text("Cancel")),
+            TextButton(
+              onPressed: () {
+                setState(() {
+                  _tasks.add({
+                    'id': _tasks.length + 1,
+                    'title': titleController.text,
+                    'description': descriptionController.text,
+                    'dueDate': dueDateController.text,
+                    'isCompleted': false,
+                    'repeatDays': selectedRepeat,
+                  });
                 });
-              });
-              Navigator.of(context).pop();
-            },
-            child: Text("Add"),
-          ),
-        ],
-      );
-    },
-  );
-}
+                Navigator.of(context).pop();
+                if (selectedRepeat == 'None') {
+                  _scheduleNotification({
+                    'id': _tasks.length,
+                    'title': titleController.text,
+                    'dueDate': dueDateController.text,
+                  });
+                }
+              },
+              child: Text("Add"),
+            ),
+          ],
+        );
+      },
+    );
+  }
 
-// Show dialog to edit an existing task
-void _showEditTaskDialog(BuildContext context, Map<String, dynamic> task) {
-  final TextEditingController titleController = TextEditingController(text: task['title']);
-  final TextEditingController descriptionController = TextEditingController(text: task['description']);
-  final TextEditingController dueDateController = TextEditingController(text: task['dueDate']);
-  String? selectedRepeat = task['repeatDays'];
+  void _showEditTaskDialog(BuildContext context, Map<String, dynamic> task) {
+    final titleController = TextEditingController(text: task['title']);
+    final descriptionController = TextEditingController(text: task['description']);
+    final dueDateController = TextEditingController(text: task['dueDate']);
+    String? selectedRepeat = task['repeatDays'];
 
-  showDialog(
-    context: context,
-    builder: (BuildContext context) {
-      return AlertDialog(
-        title: Text("Edit Task"),
-        content: SingleChildScrollView(
-          child: Column(
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: Text("Edit Task"),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
             children: [
-              TextField(
-                controller: titleController,
-                decoration: InputDecoration(labelText: 'Task Title'),
-              ),
-              TextField(
-                controller: descriptionController,
-                decoration: InputDecoration(labelText: 'Task Description'),
-              ),
-              TextField(
-                controller: dueDateController,
-                decoration: InputDecoration(labelText: 'Due Date (YYYY-MM-DD HH:MM)'),
-              ),
+              TextField(controller: titleController, decoration: InputDecoration(labelText: 'Title')),
+              TextField(controller: descriptionController, decoration: InputDecoration(labelText: 'Description')),
+              TextField(controller: dueDateController, decoration: InputDecoration(labelText: 'Due Date (YYYY-MM-DD HH:MM)')),
               DropdownButtonFormField<String>(
                 value: selectedRepeat,
+                items: ['None', 'Daily', 'Weekly', 'Monthly']
+                    .map((repeat) => DropdownMenuItem(value: repeat, child: Text(repeat)))
+                    .toList(),
+                onChanged: (newValue) => selectedRepeat = newValue,
                 decoration: InputDecoration(labelText: 'Repeat'),
-                items: ['None', 'Daily', 'Weekly', 'Monthly'].map((String value) {
-                  return DropdownMenuItem<String>(
-                    value: value,
-                    child: Text(value),
-                  );
-                }).toList(),
-                onChanged: (newValue) {
-                  setState(() {
-                    selectedRepeat = newValue;
-                  });
-                },
               ),
             ],
           ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () {
-              Navigator.of(context).pop();
-            },
-            child: Text("Cancel"),
-          ),
-          TextButton(
-            onPressed: () {
-              setState(() {
-                task['title'] = titleController.text;
-                task['description'] = descriptionController.text;
-                task['dueDate'] = dueDateController.text;
-                task['repeatDays'] = selectedRepeat;
-              });
-              Navigator.of(context).pop();
-            },
-            child: Text("Save"),
-          ),
-        ],
-      );
-    },
-  );
-}
+          actions: [
+            TextButton(onPressed: () => Navigator.of(context).pop(), child: Text("Cancel")),
+            TextButton(
+              onPressed: () {
+                setState(() {
+                  task['title'] = titleController.text;
+                  task['description'] = descriptionController.text;
+                  task['dueDate'] = dueDateController.text;
+                  task['repeatDays'] = selectedRepeat;
+                });
+                Navigator.of(context).pop();
+              },
+              child: Text("Save"),
+            ),
+          ],
+        );
+      },
+    );
+  }
 }
