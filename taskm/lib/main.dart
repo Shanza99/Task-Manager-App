@@ -69,21 +69,21 @@ class _TaskHomePageState extends State<TaskHomePage> with SingleTickerProviderSt
     if (_database != null) {
       final tasks = await _database!.query('tasks');
       setState(() {
-        _tasks = tasks;
+        _tasks = tasks; // Update the tasks list and refresh the UI
       });
     }
   }
 
-  Future<void> _addTask(String title, String description) async {
+  Future<void> _addTask(String title, String description, DateTime dueDate) async {
     if (_database != null) {
       await _database!.insert('tasks', {
         'title': title,
         'description': description,
-        'dueDate': DateTime.now().toIso8601String(), // Use ISO format
+        'dueDate': dueDate.toIso8601String(), // Ensure the date is stored correctly
         'repeatDays': '',
         'isCompleted': 0,
       });
-      _fetchTasks(); // Refresh the task list after insertion
+      _fetchTasks(); // Fetch tasks again to update the UI immediately
     }
   }
 
@@ -100,19 +100,10 @@ class _TaskHomePageState extends State<TaskHomePage> with SingleTickerProviderSt
     await _notificationsPlugin.initialize(settings);
   }
 
-  Future<void> _showNotification(String title, String body) async {
-    final android = AndroidNotificationDetails(
-      'task_channel',
-      'Task Notifications',
-      channelDescription: 'Channel for task notifications',
-    );
-    final details = NotificationDetails(android: android);
-    await _notificationsPlugin.show(0, title, body, details);
-  }
-
   void _showAddTaskDialog(BuildContext context) {
     final titleController = TextEditingController();
     final descriptionController = TextEditingController();
+    DateTime selectedDate = DateTime.now();
 
     showDialog(
       context: context,
@@ -130,6 +121,20 @@ class _TaskHomePageState extends State<TaskHomePage> with SingleTickerProviderSt
                 controller: descriptionController,
                 decoration: InputDecoration(labelText: 'Task Description'),
               ),
+              ElevatedButton(
+                onPressed: () async {
+                  final pickedDate = await showDatePicker(
+                    context: context,
+                    initialDate: selectedDate,
+                    firstDate: DateTime.now(),
+                    lastDate: DateTime(2100),
+                  );
+                  if (pickedDate != null) {
+                    selectedDate = pickedDate;
+                  }
+                },
+                child: Text('Pick Due Date'),
+              ),
             ],
           ),
           actions: [
@@ -142,7 +147,7 @@ class _TaskHomePageState extends State<TaskHomePage> with SingleTickerProviderSt
                 final title = titleController.text;
                 final description = descriptionController.text;
                 if (title.isNotEmpty && description.isNotEmpty) {
-                  _addTask(title, description);
+                  _addTask(title, description, selectedDate);
                   Navigator.of(context).pop();
                 }
               },
@@ -152,25 +157,6 @@ class _TaskHomePageState extends State<TaskHomePage> with SingleTickerProviderSt
         );
       },
     );
-  }
-
-  List<Map<String, dynamic>> _getTasksForToday() {
-    final today = DateTime.now();
-    return _tasks.where((task) {
-      final dueDate = DateTime.parse(task['dueDate']);
-      return dueDate.year == today.year &&
-          dueDate.month == today.month &&
-          dueDate.day == today.day &&
-          task['isCompleted'] == 0;
-    }).toList();
-  }
-
-  List<Map<String, dynamic>> _getCompletedTasks() {
-    return _tasks.where((task) => task['isCompleted'] == 1).toList();
-  }
-
-  List<Map<String, dynamic>> _getRepeatedTasks() {
-    return _tasks.where((task) => task['repeatDays'] != '').toList();
   }
 
   @override
@@ -219,9 +205,27 @@ class _TaskHomePageState extends State<TaskHomePage> with SingleTickerProviderSt
             icon: Icon(Icons.delete),
             onPressed: () => _deleteTask(task['id']),
           ),
-          onTap: () => _showNotification(task['title'], task['description']),
         );
       },
     );
+  }
+
+  List<Map<String, dynamic>> _getTasksForToday() {
+    final today = DateTime.now();
+    return _tasks.where((task) {
+      final dueDate = DateTime.parse(task['dueDate']);
+      return dueDate.year == today.year &&
+          dueDate.month == today.month &&
+          dueDate.day == today.day &&
+          task['isCompleted'] == 0;
+    }).toList();
+  }
+
+  List<Map<String, dynamic>> _getCompletedTasks() {
+    return _tasks.where((task) => task['isCompleted'] == 1).toList();
+  }
+
+  List<Map<String, dynamic>> _getRepeatedTasks() {
+    return _tasks.where((task) => task['repeatDays'] != '').toList();
   }
 }
