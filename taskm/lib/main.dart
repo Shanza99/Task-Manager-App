@@ -310,7 +310,7 @@ class _TaskHomePageState extends State<TaskHomePage> with SingleTickerProviderSt
 
   Widget _buildTaskList(List<Map<String, dynamic>> tasks) {
     if (tasks.isEmpty) {
-      return Center(child: Text('No tasks available'));
+      return Center(child: Text('No tasks available.'));
     }
 
     return ListView.builder(
