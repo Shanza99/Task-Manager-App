@@ -1,6 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart'; // For date formatting
+import 'package:intl/intl.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
 void main() {
@@ -38,14 +38,23 @@ class _TaskHomePageState extends State<TaskHomePage> with SingleTickerProviderSt
     flutterLocalNotificationsPlugin = FlutterLocalNotificationsPlugin();
     var initializationSettingsAndroid = AndroidInitializationSettings('@mipmap/ic_launcher');
     var initializationSettings = InitializationSettings(android: initializationSettingsAndroid);
-    flutterLocalNotificationsPlugin!.initialize(initializationSettings);
+    
+    flutterLocalNotificationsPlugin!.initialize(initializationSettings,
+        onSelectNotification: (String? payload) async {
+          print("Notification tapped: $payload");
+        }).then((_) {
+      print("Notification plugin initialized.");
+    }).catchError((error) {
+      print("Error initializing notifications: $error");
+    });
   }
 
-  // Request notification permission (iOS)
+  // Request notification permission (for iOS)
   void _requestNotificationPermission() {
     if (defaultTargetPlatform == TargetPlatform.iOS) {
       flutterLocalNotificationsPlugin!.resolvePlatformSpecificImplementation<IOSFlutterLocalNotificationsPlugin>()
           ?.requestPermissions(alert: true, badge: true, sound: true);
+      print("Notification permissions requested for iOS.");
     }
   }
 
@@ -103,13 +112,18 @@ class _TaskHomePageState extends State<TaskHomePage> with SingleTickerProviderSt
       ticker: 'ticker',
     );
     var platformDetails = NotificationDetails(android: androidDetails);
+
+    // Make sure notification is showing
     await flutterLocalNotificationsPlugin!.show(
       0,
       'New Task Created',
       'You have a new task: $taskTitle',
       platformDetails,
       payload: 'Task details here', // Optional payload
-    );
+    ).catchError((error) {
+      print("Error showing notification: $error");
+    });
+    print("Notification shown for task: $taskTitle");
   }
 
   @override
@@ -280,18 +294,18 @@ class _TaskHomePageState extends State<TaskHomePage> with SingleTickerProviderSt
             TextButton(
               onPressed: () {
                 setState(() {
-                  _tasks.add({
-                    'id': DateTime.now().millisecondsSinceEpoch,
+                  var newTask = {
+                    'id': _tasks.length + 1,
                     'title': titleController.text,
                     'description': descriptionController.text,
                     'dueDate': selectedDate.toIso8601String(),
                     'isCompleted': false,
                     'isRepeating': isRepeating,
                     'repeatInterval': repeatInterval,
-                  });
-                  // If the task is repeating, it will automatically appear in the repeated tasks tab
+                  };
+                  _tasks.add(newTask);
                   if (isRepeating) {
-                    _showNotification(titleController.text);
+                    _showNotification(titleController.text); // Show notification if repeating
                   }
                 });
                 Navigator.pop(context);
