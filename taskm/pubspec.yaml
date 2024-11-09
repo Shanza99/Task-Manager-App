@@ -30,8 +30,9 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-  sqflite: ^2.2.0+3
+  sqflite: ^2.0.0+4
   path: ^1.8.3
+  shared_preferences: ^2.0.15
   flutter_local_notifications: ^9.0.0
 
 
