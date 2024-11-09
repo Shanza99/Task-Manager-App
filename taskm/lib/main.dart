@@ -3,8 +3,7 @@ import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
-import 'package:flutter/foundation.dart';  // Import this for kIsWeb
-import 'dart:io' show Platform;
+import 'package:flutter/foundation.dart';
 
 void main() {
   runApp(TaskManagerApp());
@@ -41,16 +40,22 @@ class _TaskHomePageState extends State<TaskHomePage> with SingleTickerProviderSt
 
   Future<void> _initDatabase() async {
     if (_isWeb) {
-      _fetchTasksFromPrefs();
+      await _loadTasksFromSharedPreferences();
     } else {
       String path = join(await getDatabasesPath(), 'tasks.db');
       _database = await openDatabase(
         path,
         version: 1,
         onCreate: (db, version) {
-          return db.execute(
-            'CREATE TABLE tasks (id INTEGER PRIMARY KEY, title TEXT, description TEXT, dueDate TEXT, isCompleted INTEGER)',
-          );
+          db.execute('''
+            CREATE TABLE tasks (
+              id INTEGER PRIMARY KEY,
+              title TEXT,
+              description TEXT,
+              dueDate TEXT,
+              isCompleted INTEGER
+            )
+          ''');
         },
       );
       _fetchTasks();
@@ -58,7 +63,9 @@ class _TaskHomePageState extends State<TaskHomePage> with SingleTickerProviderSt
   }
 
   Future<void> _fetchTasks() async {
-    if (_database != null) {
+    if (_isWeb) {
+      await _loadTasksFromSharedPreferences();
+    } else if (_database != null) {
       final tasks = await _database!.query('tasks');
       setState(() {
         _tasks = tasks;
@@ -66,91 +73,102 @@ class _TaskHomePageState extends State<TaskHomePage> with SingleTickerProviderSt
     }
   }
 
-  Future<void> _fetchTasksFromPrefs() async {
-    final prefs = await SharedPreferences.getInstance();
-    final tasksString = prefs.getString('tasks') ?? '[]';
-    final tasks = List<Map<String, dynamic>>.from(jsonDecode(tasksString));
-    setState(() {
-      _tasks = tasks;
-    });
-  }
-
   Future<void> _addTask(String title, String description, DateTime dueDate) async {
-    final task = {
+    final newTask = {
       'title': title,
       'description': description,
       'dueDate': dueDate.toIso8601String(),
       'isCompleted': 0,
     };
+
     if (_isWeb) {
-      await _addTaskToPrefs(task);
+      _tasks.add(newTask);
+      await _saveTasksToSharedPreferences();
     } else if (_database != null) {
-      await _database!.insert('tasks', task);
-      _fetchTasks();
+      await _database!.insert('tasks', newTask);
     }
+    _fetchTasks();
   }
 
-  Future<void> _addTaskToPrefs(Map<String, dynamic> task) async {
-    final prefs = await SharedPreferences.getInstance();
-    final tasksString = prefs.getString('tasks') ?? '[]';
-    final tasks = List<Map<String, dynamic>>.from(jsonDecode(tasksString));
-    tasks.add(task);
-    await prefs.setString('tasks', jsonEncode(tasks));
-    _fetchTasksFromPrefs();
-  }
-
-  Future<void> _deleteTask(int id) async {
+  Future<void> _deleteTask(int index) async {
     if (_isWeb) {
-      await _deleteTaskFromPrefs(id);
+      _tasks.removeAt(index);
+      await _saveTasksToSharedPreferences();
     } else if (_database != null) {
+      int id = _tasks[index]['id'];
       await _database!.delete('tasks', where: 'id = ?', whereArgs: [id]);
-      _fetchTasks();
     }
+    _fetchTasks();
   }
 
-  Future<void> _deleteTaskFromPrefs(int id) async {
-    final prefs = await SharedPreferences.getInstance();
-    final tasksString = prefs.getString('tasks') ?? '[]';
-    final tasks = List<Map<String, dynamic>>.from(jsonDecode(tasksString));
-    tasks.removeWhere((task) => task['id'] == id);
-    await prefs.setString('tasks', jsonEncode(tasks));
-    _fetchTasksFromPrefs();
+  Future<void> _saveTasksToSharedPreferences() async {
+    SharedPreferences prefs = await SharedPreferences.getInstance();
+    List<String> taskList = _tasks.map((task) => jsonEncode(task)).toList();
+    await prefs.setStringList('tasks', taskList);
   }
 
-  // Placeholder for getting tasks for today
-  List<Map<String, dynamic>> _getTasksForToday() {
-    return _tasks.where((task) {
-      final dueDate = DateTime.parse(task['dueDate']);
-      return dueDate.day == DateTime.now().day &&
-          dueDate.month == DateTime.now().month &&
-          dueDate.year == DateTime.now().year;
-    }).toList();
+  Future<void> _loadTasksFromSharedPreferences() async {
+    SharedPreferences prefs = await SharedPreferences.getInstance();
+    List<String>? taskList = prefs.getStringList('tasks');
+    setState(() {
+      _tasks = taskList != null ? taskList.map((task) => jsonDecode(task)).toList() : [];
+    });
   }
 
-  // Placeholder for getting completed tasks
-  List<Map<String, dynamic>> _getCompletedTasks() {
-    return _tasks.where((task) => task['isCompleted'] == 1).toList();
-  }
+  void _showAddTaskDialog(BuildContext context) {
+    final titleController = TextEditingController();
+    final descriptionController = TextEditingController();
+    DateTime selectedDate = DateTime.now();
 
-  // Placeholder for getting repeated tasks
-  List<Map<String, dynamic>> _getRepeatedTasks() {
-    // Define your repeated task logic here, if necessary
-    return [];
-  }
-
-  // Updated buildTaskList function
-  Widget _buildTaskList(List<Map<String, dynamic>> tasks) {
-    return ListView.builder(
-      itemCount: tasks.length,
-      itemBuilder: (context, index) {
-        final task = tasks[index];
-        return ListTile(
-          title: Text(task['title']),
-          subtitle: Text(task['description']),
-          trailing: IconButton(
-            icon: Icon(Icons.delete),
-            onPressed: () => _deleteTask(task['id']),
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: Text('Add New Task'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: titleController,
+                decoration: InputDecoration(labelText: 'Task Title'),
+              ),
+              TextField(
+                controller: descriptionController,
+                decoration: InputDecoration(labelText: 'Task Description'),
+              ),
+              ElevatedButton(
+                onPressed: () async {
+                  final pickedDate = await showDatePicker(
+                    context: context,
+                    initialDate: selectedDate,
+                    firstDate: DateTime.now(),
+                    lastDate: DateTime(2100),
+                  );
+                  if (pickedDate != null) {
+                    selectedDate = pickedDate;
+                  }
+                },
+                child: Text('Pick Due Date'),
+              ),
+            ],
           ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: Text('Cancel'),
+            ),
+            TextButton(
+              onPressed: () {
+                final title = titleController.text;
+                final description = descriptionController.text;
+                if (title.isNotEmpty && description.isNotEmpty) {
+                  _addTask(title, description, selectedDate);
+                  Navigator.of(context).pop();
+                }
+              },
+              child: Text('Add Task'),
+            ),
+          ],
         );
       },
     );
@@ -180,6 +198,49 @@ class _TaskHomePageState extends State<TaskHomePage> with SingleTickerProviderSt
           _buildTaskList(_getRepeatedTasks()),
         ],
       ),
+      floatingActionButton: FloatingActionButton(
+        onPressed: () => _showAddTaskDialog(context),
+        child: Icon(Icons.add),
+      ),
     );
+  }
+
+  Widget _buildTaskList(List<Map<String, dynamic>> tasks) {
+    if (tasks.isEmpty) {
+      return Center(child: Text('No tasks available.'));
+    }
+    return ListView.builder(
+      itemCount: tasks.length,
+      itemBuilder: (context, index) {
+        final task = tasks[index];
+        return ListTile(
+          title: Text(task['title']),
+          subtitle: Text(task['description']),
+          trailing: IconButton(
+            icon: Icon(Icons.delete),
+            onPressed: () => _deleteTask(index),
+          ),
+        );
+      },
+    );
+  }
+
+  List<Map<String, dynamic>> _getTasksForToday() {
+    final today = DateTime.now();
+    return _tasks.where((task) {
+      final dueDate = DateTime.parse(task['dueDate']);
+      return dueDate.year == today.year &&
+          dueDate.month == today.month &&
+          dueDate.day == today.day &&
+          task['isCompleted'] == 0;
+    }).toList();
+  }
+
+  List<Map<String, dynamic>> _getCompletedTasks() {
+    return _tasks.where((task) => task['isCompleted'] == 1).toList();
+  }
+
+  List<Map<String, dynamic>> _getRepeatedTasks() {
+    return _tasks.where((task) => task['repeatDays'] != null && task['repeatDays'] != '').toList();
   }
 }
