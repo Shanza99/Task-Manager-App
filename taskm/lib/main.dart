@@ -109,8 +109,10 @@ class _TaskHomePageState extends State<TaskHomePage> with SingleTickerProviderSt
     DateTime now = DateTime.now();
     DateTime taskDueDate = DateTime.parse(task['dueDate']);
 
-    // Check if the task's due date is today
-    if (taskDueDate.year == now.year && taskDueDate.month == now.month && taskDueDate.day == now.day) {
+    // Compare only the year, month, and day (ignore time portion)
+    if (taskDueDate.year == now.year &&
+        taskDueDate.month == now.month &&
+        taskDueDate.day == now.day) {
       if (task['repeatDays'] != null) {
         // If the task repeats, add logic to show repeated task notification
         if (task['repeatDays'] == 'daily') {
