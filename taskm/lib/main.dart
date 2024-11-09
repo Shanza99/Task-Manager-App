@@ -1,5 +1,4 @@
 import 'dart:html' as html;
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:intl/intl.dart';
@@ -74,6 +73,7 @@ class _TaskHomePageState extends State<TaskHomePage> with SingleTickerProviderSt
         'description': 'Complete project report',
         'dueDate': DateTime.now().add(Duration(seconds: 10)).toIso8601String(),
         'isCompleted': false,
+        'repeatDays': 'daily', // Repeats every day
       },
       {
         'id': 2,
@@ -81,8 +81,24 @@ class _TaskHomePageState extends State<TaskHomePage> with SingleTickerProviderSt
         'description': 'Call client',
         'dueDate': DateTime.now().add(Duration(seconds: 20)).toIso8601String(),
         'isCompleted': false,
+        'repeatDays': 'weekly', // Repeats every week
+      },
+      {
+        'id': 3,
+        'title': 'Task 3',
+        'description': 'Submit monthly report',
+        'dueDate': DateTime.now().add(Duration(seconds: 30)).toIso8601String(),
+        'isCompleted': false,
+        'repeatDays': 'monthly', // Repeats every month
       },
     ];
+  }
+
+  // Filter tasks for repeated tasks
+  List<Map<String, dynamic>> _getRepeatedTasks() {
+    return _tasks.where((task) {
+      return task['repeatDays'] != null && task['repeatDays'] != '';
+    }).toList();
   }
 
   // Function to check if task is due today and show notification
@@ -92,19 +108,27 @@ class _TaskHomePageState extends State<TaskHomePage> with SingleTickerProviderSt
 
     // Check if the task's due date is today
     if (taskDueDate.year == now.year && taskDueDate.month == now.month && taskDueDate.day == now.day) {
-      if (isWeb) {
-        // Trigger Web Notification
-        showWebNotification(
-          "Task Due: ${task['title']}",
-          "Your task is due today: ${task['description']}",
-        );
-      } else {
-        // Trigger Desktop Notification
-        _showDesktopNotification(
-          "Task Due: ${task['title']}",
-          "Your task is due today: ${task['description']}",
-        );
+      if (task['repeatDays'] != null) {
+        // If the task repeats, add logic to show repeated task notification
+        if (task['repeatDays'] == 'daily') {
+          _showNotificationForRepeatedTask(task);
+        }
       }
+    }
+  }
+
+  // Function to show notification for repeated tasks
+  void _showNotificationForRepeatedTask(Map<String, dynamic> task) {
+    if (isWeb) {
+      showWebNotification(
+        "Repeated Task: ${task['title']}",
+        "Your task is due today: ${task['description']}",
+      );
+    } else {
+      _showDesktopNotification(
+        "Repeated Task: ${task['title']}",
+        "Your task is due today: ${task['description']}",
+      );
     }
   }
 
@@ -138,10 +162,6 @@ class _TaskHomePageState extends State<TaskHomePage> with SingleTickerProviderSt
     return _tasks.where((task) => task['isCompleted'] == 1).toList();
   }
 
-  List<Map<String, dynamic>> _getRepeatedTasks() {
-    return _tasks.where((task) => task['repeatDays'] != null && task['repeatDays'] != '').toList();
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -153,7 +173,7 @@ class _TaskHomePageState extends State<TaskHomePage> with SingleTickerProviderSt
             Tab(text: 'All Tasks'),
             Tab(text: 'Today\'s Tasks'),
             Tab(text: 'Completed'),
-            Tab(text: 'Repeated'),
+            Tab(text: 'Repeated'), // Repeated tab
           ],
         ),
       ),
@@ -163,7 +183,7 @@ class _TaskHomePageState extends State<TaskHomePage> with SingleTickerProviderSt
           _buildTaskList(_tasks),
           _buildTaskList(_getTasksForToday()),
           _buildTaskList(_getCompletedTasks()),
-          _buildTaskList(_getRepeatedTasks()),
+          _buildTaskList(_getRepeatedTasks()), // Show repeated tasks
         ],
       ),
       floatingActionButton: FloatingActionButton(
@@ -173,125 +193,34 @@ class _TaskHomePageState extends State<TaskHomePage> with SingleTickerProviderSt
     );
   }
 
-  // Widget to display task list
+  // Function to build task list
   Widget _buildTaskList(List<Map<String, dynamic>> tasks) {
-    if (tasks.isEmpty) {
-      return Center(child: Text('No tasks available.'));
-    }
     return ListView.builder(
       itemCount: tasks.length,
       itemBuilder: (context, index) {
-        final task = tasks[index];
+        var task = tasks[index];
         return ListTile(
           title: Text(task['title']),
           subtitle: Text(task['description']),
-          trailing: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              // Edit button (pencil icon)
-              IconButton(
-                icon: Icon(Icons.edit),
-                onPressed: () => _editTaskDialog(context, task, index),
-              ),
-              // Mark as done button (checkmark icon)
-              IconButton(
-                icon: Icon(Icons.check),
-                onPressed: () => _markTaskAsDone(index),
-              ),
-            ],
+          trailing: IconButton(
+            icon: Icon(Icons.check),
+            onPressed: () {
+              setState(() {
+                task['isCompleted'] = 1; // Mark as completed
+              });
+            },
           ),
         );
       },
     );
   }
 
-  // Function to mark a task as done
-  void _markTaskAsDone(int index) {
-    setState(() {
-      _tasks[index]['isCompleted'] = 1; // Mark the task as completed
-    });
-  }
-
-  // Function to show edit task dialog
-  void _editTaskDialog(BuildContext context, Map<String, dynamic> task, int index) {
-    final titleController = TextEditingController(text: task['title']);
-    final descriptionController = TextEditingController(text: task['description']);
-    DateTime selectedDate = DateTime.parse(task['dueDate']);
-
-    showDialog(
-      context: context,
-      builder: (context) {
-        return AlertDialog(
-          title: Text('Edit Task'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: titleController,
-                decoration: InputDecoration(labelText: 'Task Title'),
-              ),
-              TextField(
-                controller: descriptionController,
-                decoration: InputDecoration(labelText: 'Task Description'),
-              ),
-              ElevatedButton(
-                onPressed: () async {
-                  final pickedDate = await showDatePicker(
-                    context: context,
-                    initialDate: selectedDate,
-                    firstDate: DateTime.now(),
-                    lastDate: DateTime(2100),
-                  );
-                  if (pickedDate != null) {
-                    selectedDate = pickedDate;
-                  }
-                },
-                child: Text('Pick Due Date'),
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: Text('Cancel'),
-            ),
-            TextButton(
-              onPressed: () {
-                final title = titleController.text;
-                final description = descriptionController.text;
-                if (title.isNotEmpty && description.isNotEmpty) {
-                  _editTask(index, title, description, selectedDate);
-                  Navigator.of(context).pop();
-                }
-              },
-              child: Text('Save Changes'),
-            ),
-          ],
-        );
-      },
-    );
-  }
-
-  // Function to edit task
-  void _editTask(int index, String title, String description, DateTime dueDate) {
-    setState(() {
-      _tasks[index] = {
-        'title': title,
-        'description': description,
-        'dueDate': dueDate.toIso8601String(),
-        'isCompleted': _tasks[index]['isCompleted'],
-      };
-    });
-
-    // Check if the task is due today and show notification
-    _checkIfTaskIsDueToday(_tasks[index]);
-  }
-
-  // Function to add task (Dialog)
+  // Dialog to add a new task
   void _showAddTaskDialog(BuildContext context) {
     final titleController = TextEditingController();
     final descriptionController = TextEditingController();
     DateTime selectedDate = DateTime.now();
+    String repeatValue = 'daily'; // Default repeat value
 
     showDialog(
       context: context,
@@ -323,6 +252,21 @@ class _TaskHomePageState extends State<TaskHomePage> with SingleTickerProviderSt
                 },
                 child: Text('Pick Due Date'),
               ),
+              DropdownButton<String>(
+                value: repeatValue,
+                items: <String>['daily', 'weekly', 'monthly']
+                    .map((String value) {
+                  return DropdownMenuItem<String>(
+                    value: value,
+                    child: Text(value),
+                  );
+                }).toList(),
+                onChanged: (String? newValue) {
+                  setState(() {
+                    repeatValue = newValue!;
+                  });
+                },
+              ),
             ],
           ),
           actions: [
@@ -335,7 +279,7 @@ class _TaskHomePageState extends State<TaskHomePage> with SingleTickerProviderSt
                 final title = titleController.text;
                 final description = descriptionController.text;
                 if (title.isNotEmpty && description.isNotEmpty) {
-                  _addTask(title, description, selectedDate);
+                  _addTask(title, description, selectedDate, repeatValue);
                   Navigator.of(context).pop();
                 }
               },
@@ -347,13 +291,14 @@ class _TaskHomePageState extends State<TaskHomePage> with SingleTickerProviderSt
     );
   }
 
-  // Function to add task (SQLite/Web)
-  Future<void> _addTask(String title, String description, DateTime dueDate) async {
+  // Function to add task
+  Future<void> _addTask(String title, String description, DateTime dueDate, String repeatDays) async {
     final newTask = {
       'title': title,
       'description': description,
       'dueDate': dueDate.toIso8601String(),
       'isCompleted': 0,
+      'repeatDays': repeatDays,
     };
     setState(() {
       _tasks.add(newTask);
@@ -361,12 +306,5 @@ class _TaskHomePageState extends State<TaskHomePage> with SingleTickerProviderSt
 
     // Check if the task is due today and show notification
     _checkIfTaskIsDueToday(newTask);
-  }
-
-  // Function to delete task
-  Future<void> _deleteTask(int index) async {
-    setState(() {
-      _tasks.removeAt(index);
-    });
   }
 }
