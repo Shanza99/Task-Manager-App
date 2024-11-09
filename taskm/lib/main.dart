@@ -102,12 +102,10 @@ class _TaskHomePageState extends State<TaskHomePage> with SingleTickerProviderSt
     ];
   }
 
-  // Filter tasks for repeated tasks
+  // Function to get repeated tasks (daily, weekly, etc.)
   List<Map<String, dynamic>> _getRepeatedTasks() {
     return _tasks.where((task) {
-      return task['repeatDays'] != null &&
-          task['repeatDays'] != '' &&
-          task['repeatDays'] != 'once'; // Exclude once tasks
+      return task['repeatDays'] != 'once'; // Filter out tasks that are 'once'
     }).toList();
   }
 
@@ -116,6 +114,11 @@ class _TaskHomePageState extends State<TaskHomePage> with SingleTickerProviderSt
     final firstDayOfYear = DateTime(date.year, 1, 1);
     final daysSinceFirst = date.difference(firstDayOfYear).inDays;
     return ((daysSinceFirst / 7).floor()) + 1;
+  }
+
+  // Function to check if two dates are in the same week
+  bool _isSameWeek(DateTime date1, DateTime date2) {
+    return date1.year == date2.year && getWeekOfYear(date1) == getWeekOfYear(date2);
   }
 
   // Function to check if task is due today and show notification
@@ -220,7 +223,7 @@ class _TaskHomePageState extends State<TaskHomePage> with SingleTickerProviderSt
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text('Task Manager'),
+        title: Text("Task Manager"),
         bottom: TabBar(
           controller: _tabController,
           tabs: [
