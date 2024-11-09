@@ -91,6 +91,25 @@ class _TaskHomePageState extends State<TaskHomePage> with SingleTickerProviderSt
     return _tasks.where((task) => task['isRepeating'] == true).toList();
   }
 
+  // Show a notification when a task is created
+  void _showNotification(String taskTitle) async {
+    var androidDetails = AndroidNotificationDetails(
+      'channel_id',
+      'channel_name',
+      importance: Importance.max,
+      priority: Priority.high,
+      ticker: 'ticker',
+    );
+    var platformDetails = NotificationDetails(android: androidDetails);
+    await flutterLocalNotificationsPlugin!.show(
+      0,
+      'New Task Created',
+      'You have a new task: $taskTitle',
+      platformDetails,
+      payload: 'Task details here', // Optional payload
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -269,6 +288,7 @@ class _TaskHomePageState extends State<TaskHomePage> with SingleTickerProviderSt
                     'repeatInterval': repeatInterval,
                   });
                   // If the task is repeating, it will automatically appear in the Repeated Tasks tab
+                  _showNotification(titleController.text); // Show notification
                 });
                 Navigator.pop(context);
               },
@@ -286,7 +306,7 @@ class _TaskHomePageState extends State<TaskHomePage> with SingleTickerProviderSt
     final descriptionController = TextEditingController(text: task['description']);
     DateTime selectedDate = DateTime.parse(task['dueDate']);
     bool isRepeating = task['isRepeating'];
-    String repeatInterval = task['repeatInterval'];
+    String repeatInterval = task['repeatInterval'] ?? 'None';
 
     showDialog(
       context: context,
