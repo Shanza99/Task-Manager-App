@@ -79,18 +79,18 @@ class _TaskHomePageState extends State<TaskHomePage> with SingleTickerProviderSt
       await _database!.insert('tasks', {
         'title': title,
         'description': description,
-        'dueDate': DateTime.now().toString(),
+        'dueDate': DateTime.now().toIso8601String(), // Use ISO format
         'repeatDays': '',
         'isCompleted': 0,
       });
-      _fetchTasks();
+      _fetchTasks(); // Refresh the task list after insertion
     }
   }
 
   Future<void> _deleteTask(int id) async {
     if (_database != null) {
       await _database!.delete('tasks', where: 'id = ?', whereArgs: [id]);
-      _fetchTasks();
+      _fetchTasks(); // Refresh the task list after deletion
     }
   }
 
@@ -102,8 +102,8 @@ class _TaskHomePageState extends State<TaskHomePage> with SingleTickerProviderSt
 
   Future<void> _showNotification(String title, String body) async {
     final android = AndroidNotificationDetails(
-      'task_channel', // Channel ID
-      'Task Notifications', // Channel name
+      'task_channel',
+      'Task Notifications',
       channelDescription: 'Channel for task notifications',
     );
     final details = NotificationDetails(android: android);
