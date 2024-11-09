@@ -288,10 +288,12 @@ class _TaskHomePageState extends State<TaskHomePage> with SingleTickerProviderSt
     return _tasks.where((task) => task['repeatDays'] != 'none').toList();
   }
 
-  // Show add task dialog
+  // Show add task dialog with date and time selection
   void _showAddTaskDialog(BuildContext context) {
     final taskController = TextEditingController();
     final descriptionController = TextEditingController();
+    DateTime? selectedDate = DateTime.now();
+    TimeOfDay selectedTime = TimeOfDay.now();
 
     showDialog(
       context: context,
@@ -308,6 +310,26 @@ class _TaskHomePageState extends State<TaskHomePage> with SingleTickerProviderSt
               controller: descriptionController,
               decoration: InputDecoration(labelText: 'Task Description'),
             ),
+            TextButton(
+              onPressed: () async {
+                selectedDate = await showDatePicker(
+                  context: context,
+                  initialDate: selectedDate!,
+                  firstDate: DateTime(2020),
+                  lastDate: DateTime(2101),
+                );
+              },
+              child: Text("Select Due Date: ${selectedDate?.toLocal()}"),
+            ),
+            TextButton(
+              onPressed: () async {
+                selectedTime = await showTimePicker(
+                  context: context,
+                  initialTime: selectedTime,
+                ) ?? selectedTime;
+              },
+              child: Text("Select Time: ${selectedTime.format(context)}"),
+            ),
           ],
         ),
         actions: [
@@ -319,16 +341,19 @@ class _TaskHomePageState extends State<TaskHomePage> with SingleTickerProviderSt
           ),
           TextButton(
             onPressed: () {
-              setState(() {
-                _tasks.add({
-                  'id': _tasks.length + 1,
-                  'title': taskController.text,
-                  'description': descriptionController.text,
-                  'dueDate': DateTime.now().add(Duration(days: 1)).toIso8601String(),
-                  'isCompleted': false,
-                  'repeatDays': 'daily',
+              if (selectedDate != null) {
+                setState(() {
+                  _tasks.add({
+                    'id': _tasks.length + 1,
+                    'title': taskController.text,
+                    'description': descriptionController.text,
+                    'dueDate': DateTime(selectedDate!.year, selectedDate!.month, selectedDate!.day, selectedTime.hour, selectedTime.minute).toIso8601String(),
+                    'isCompleted': false,
+                    'repeatDays': 'daily',
+                  });
+                  _scheduleNotification(_tasks.last); // Schedule notification
                 });
-              });
+              }
               Navigator.pop(context);
             },
             child: Text('Save'),
@@ -338,10 +363,12 @@ class _TaskHomePageState extends State<TaskHomePage> with SingleTickerProviderSt
     );
   }
 
-  // Show edit task dialog
+  // Show edit task dialog (no changes)
   void _showEditTaskDialog(BuildContext context, Map<String, dynamic> task) {
     final taskController = TextEditingController(text: task['title']);
     final descriptionController = TextEditingController(text: task['description']);
+    DateTime? selectedDate = DateTime.parse(task['dueDate']);
+    TimeOfDay selectedTime = TimeOfDay.fromDateTime(DateTime.parse(task['dueDate']));
 
     showDialog(
       context: context,
@@ -364,6 +391,26 @@ class _TaskHomePageState extends State<TaskHomePage> with SingleTickerProviderSt
                 task['description'] = value;
               },
             ),
+            TextButton(
+              onPressed: () async {
+                selectedDate = await showDatePicker(
+                  context: context,
+                  initialDate: selectedDate!,
+                  firstDate: DateTime(2020),
+                  lastDate: DateTime(2101),
+                );
+              },
+              child: Text("Select Due Date: ${selectedDate?.toLocal()}"),
+            ),
+            TextButton(
+              onPressed: () async {
+                selectedTime = await showTimePicker(
+                  context: context,
+                  initialTime: selectedTime,
+                ) ?? selectedTime;
+              },
+              child: Text("Select Time: ${selectedTime.format(context)}"),
+            ),
           ],
         ),
         actions: [
@@ -375,7 +422,9 @@ class _TaskHomePageState extends State<TaskHomePage> with SingleTickerProviderSt
           ),
           TextButton(
             onPressed: () {
-              setState(() {});
+              setState(() {
+                task['dueDate'] = DateTime(selectedDate!.year, selectedDate!.month, selectedDate!.day, selectedTime.hour, selectedTime.minute).toIso8601String();
+              });
               Navigator.pop(context);
             },
             child: Text('Save'),
@@ -385,3 +434,32 @@ class _TaskHomePageState extends State<TaskHomePage> with SingleTickerProviderSt
     );
   }
 }
+
+
+Future<void> _scheduleNotification(Map<String, dynamic> task, {int reminderMinutes = 10}) async {
+  if (_flutterLocalNotificationsPlugin == null) {
+    print("FlutterLocalNotificationsPlugin is not initialized!");
+    return;
+  }
+
+  DateTime dueDate = DateTime.parse(task['dueDate']);
+  var scheduledTime = dueDate.subtract(Duration(minutes: reminderMinutes)); // Set custom reminder time
+
+  const androidDetails = AndroidNotificationDetails(
+    'task_channel',
+    'Task Notifications',
+    importance: Importance.max,
+    priority: Priority.high,
+  );
+
+  const platformDetails = NotificationDetails(android: androidDetails);
+
+  await _flutterLocalNotificationsPlugin!.schedule(
+    task['id'],
+    'Task Reminder',
+    'Your task "${task['title']}" is due!',
+    scheduledTime,
+    platformDetails,
+  );
+}
+
