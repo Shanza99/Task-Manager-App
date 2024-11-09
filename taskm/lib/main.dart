@@ -6,7 +6,7 @@ import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:csv/csv.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'package:flutter_local_notifications/flutter_local_notifications.dart';  // Import the plugin
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
 void main() {
   runApp(TaskManagerApp());
@@ -30,15 +30,16 @@ class TaskHomePage extends StatefulWidget {
 class _TaskHomePageState extends State<TaskHomePage> with SingleTickerProviderStateMixin {
   List<Map<String, dynamic>> _tasks = [];
   late TabController _tabController;
-  FlutterLocalNotificationsPlugin? _flutterLocalNotificationsPlugin;  // Declare the plugin
+  FlutterLocalNotificationsPlugin? _flutterLocalNotificationsPlugin;
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 4, vsync: this);
-    _flutterLocalNotificationsPlugin = FlutterLocalNotificationsPlugin();  // Initialize the plugin
+    _flutterLocalNotificationsPlugin = FlutterLocalNotificationsPlugin();
     _initializeNotifications();
     _loadDummyTasks();
+    _scheduleTodayTaskNotifications(); // Add notification for today's tasks
   }
 
   // Initialize local notifications
@@ -49,10 +50,10 @@ class _TaskHomePageState extends State<TaskHomePage> with SingleTickerProviderSt
     await _flutterLocalNotificationsPlugin?.initialize(initializationSettings);
   }
 
-  // Schedule local notification for task
+  // Schedule notification for today's tasks
   Future<void> _scheduleNotification(Map<String, dynamic> task) async {
     DateTime dueDate = DateTime.parse(task['dueDate']);
-    var scheduledTime = dueDate.subtract(Duration(minutes: 10)); // Set 10 minutes before due date as notification time
+    var scheduledTime = dueDate.subtract(Duration(minutes: 10)); // 10 minutes before due date
 
     const androidDetails = AndroidNotificationDetails(
       'task_channel',
@@ -72,6 +73,19 @@ class _TaskHomePageState extends State<TaskHomePage> with SingleTickerProviderSt
     );
   }
 
+  // Schedule notifications for all tasks that are due today
+  Future<void> _scheduleTodayTaskNotifications() async {
+    for (var task in _tasks) {
+      DateTime dueDate = DateTime.parse(task['dueDate']);
+      DateTime now = DateTime.now();
+
+      // Check if the task is due today
+      if (dueDate.year == now.year && dueDate.month == now.month && dueDate.day == now.day) {
+        await _scheduleNotification(task); // Schedule the notification
+      }
+    }
+  }
+
   // Load dummy tasks for demonstration
   void _loadDummyTasks() {
     _tasks = [
@@ -87,7 +101,7 @@ class _TaskHomePageState extends State<TaskHomePage> with SingleTickerProviderSt
         'id': 2,
         'title': 'Task 2',
         'description': 'Call client',
-        'dueDate': DateTime.now().add(Duration(days: 2)).toIso8601String(),
+        'dueDate': DateTime.now().toIso8601String(),  // Due today
         'isCompleted': false,
         'repeatDays': 'weekly',
       },
@@ -268,63 +282,56 @@ class _TaskHomePageState extends State<TaskHomePage> with SingleTickerProviderSt
     );
   }
 
-// Dummy method to get today's tasks
-List<Map<String, dynamic>> _getTasksForToday() {
-  return _tasks.where((task) {
-    DateTime dueDate = DateTime.parse(task['dueDate']);
-    DateTime now = DateTime.now();
-    
-    // Compare only the date part (ignoring the time)
-    return dueDate.year == now.year &&
-           dueDate.month == now.month &&
-           dueDate.day == now.day;
-  }).toList();
-}
+  // Get today's tasks
+  List<Map<String, dynamic>> _getTasksForToday() {
+    return _tasks.where((task) {
+      DateTime dueDate = DateTime.parse(task['dueDate']);
+      return dueDate.isToday;
+    }).toList();
+  }
 
-
-  // Dummy method to get completed tasks
+  // Get completed tasks
   List<Map<String, dynamic>> _getCompletedTasks() {
     return _tasks.where((task) => task['isCompleted']).toList();
   }
 
-  // Dummy method to get repeated tasks
+  // Get repeated tasks
   List<Map<String, dynamic>> _getRepeatedTasks() {
     return _tasks.where((task) => task['repeatDays'] != null).toList();
   }
 
-  // Show dialog to add task
+  // Show add task dialog
   void _showAddTaskDialog(BuildContext context) {
+    final titleController = TextEditingController();
+    final descriptionController = TextEditingController();
+
     showDialog(
       context: context,
       builder: (context) {
         return AlertDialog(
-          title: Text('Add Task'),
+          title: Text('Add New Task'),
           content: Column(
             children: [
-              TextField(
-                decoration: InputDecoration(labelText: 'Title'),
-              ),
-              TextField(
-                decoration: InputDecoration(labelText: 'Description'),
-              ),
-              TextField(
-                decoration: InputDecoration(labelText: 'Due Date'),
-              ),
+              TextField(controller: titleController, decoration: InputDecoration(labelText: 'Title')),
+              TextField(controller: descriptionController, decoration: InputDecoration(labelText: 'Description')),
             ],
           ),
           actions: [
             TextButton(
               onPressed: () {
-                Navigator.of(context).pop();
+                setState(() {
+                  _tasks.add({
+                    'id': _tasks.length + 1,
+                    'title': titleController.text,
+                    'description': descriptionController.text,
+                    'dueDate': DateTime.now().toIso8601String(),
+                    'isCompleted': false,
+                    'repeatDays': null,
+                  });
+                });
+                Navigator.pop(context);
               },
-              child: Text('Cancel'),
-            ),
-            TextButton(
-              onPressed: () {
-                // Add task logic here
-                Navigator.of(context).pop();
-              },
-              child: Text('Add'),
+              child: Text('Add Task'),
             ),
           ],
         );
@@ -332,8 +339,11 @@ List<Map<String, dynamic>> _getTasksForToday() {
     );
   }
 
-  // Show dialog to edit task
+  // Show edit task dialog
   void _showEditTaskDialog(BuildContext context, Map<String, dynamic> task) {
+    final titleController = TextEditingController(text: task['title']);
+    final descriptionController = TextEditingController(text: task['description']);
+
     showDialog(
       context: context,
       builder: (context) {
@@ -341,37 +351,32 @@ List<Map<String, dynamic>> _getTasksForToday() {
           title: Text('Edit Task'),
           content: Column(
             children: [
-              TextField(
-                controller: TextEditingController(text: task['title']),
-                decoration: InputDecoration(labelText: 'Title'),
-              ),
-              TextField(
-                controller: TextEditingController(text: task['description']),
-                decoration: InputDecoration(labelText: 'Description'),
-              ),
-              TextField(
-                controller: TextEditingController(text: task['dueDate']),
-                decoration: InputDecoration(labelText: 'Due Date'),
-              ),
+              TextField(controller: titleController, decoration: InputDecoration(labelText: 'Title')),
+              TextField(controller: descriptionController, decoration: InputDecoration(labelText: 'Description')),
             ],
           ),
           actions: [
             TextButton(
               onPressed: () {
-                Navigator.of(context).pop();
+                setState(() {
+                  task['title'] = titleController.text;
+                  task['description'] = descriptionController.text;
+                });
+                Navigator.pop(context);
               },
-              child: Text('Cancel'),
-            ),
-            TextButton(
-              onPressed: () {
-                // Edit task logic here
-                Navigator.of(context).pop();
-              },
-              child: Text('Save'),
+              child: Text('Save Changes'),
             ),
           ],
         );
       },
     );
+  }
+}
+
+// DateTime extension for checking if a date is today
+extension DateTimeExtensions on DateTime {
+  bool get isToday {
+    final today = DateTime.now();
+    return this.year == today.year && this.month == today.month && this.day == today.day;
   }
 }
