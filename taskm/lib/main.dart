@@ -1,14 +1,14 @@
 import 'dart:html' as html;
-import 'dart:convert';  // for encoding CSV to string
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:intl/intl.dart';
-import 'package:csv/csv.dart'; // CSV generation
-import 'package:pdf/widgets.dart' as pw;  // PDF generation
-import 'package:flutter_email_sender/flutter_email_sender.dart'; // Email sending
-import 'package:path_provider/path_provider.dart';  // File storage access
-import 'dart:io'; // for file handling
+import 'package:csv/csv.dart';
+import 'package:pdf/widgets.dart' as pw;
+import 'package:pdf/pdf.dart';
+import 'package:flutter_email_sender/flutter_email_sender.dart';
+import 'package:path_provider/path_provider.dart';
+import 'dart:io';
 
 void main() {
   runApp(TaskManagerApp());
@@ -101,6 +101,82 @@ class _TaskHomePageState extends State<TaskHomePage> with SingleTickerProviderSt
     ];
   }
 
+  // Export tasks to CSV
+  void _exportToCSV() async {
+    List<List<dynamic>> rows = [];
+    rows.add(["ID", "Title", "Description", "Due Date", "Completed", "Repeating", "Repeat Interval"]);
+
+    for (var task in _tasks) {
+      rows.add([
+        task['id'],
+        task['title'],
+        task['description'],
+        task['dueDate'],
+        task['isCompleted'] ? "Yes" : "No",
+        task['isRepeating'] ? "Yes" : "No",
+        task['repeatInterval'] ?? "None",
+      ]);
+    }
+
+    String csv = const ListToCsvConverter().convert(rows);
+    
+    final directory = await getApplicationDocumentsDirectory();
+    final path = "${directory.path}/tasks.csv";
+    File file = File(path);
+    await file.writeAsString(csv);
+
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('CSV file saved at: $path')));
+  }
+
+  // Export tasks to PDF
+  void _exportToPDF() async {
+    final pdf = pw.Document();
+
+    pdf.addPage(
+      pw.Page(
+        build: (pw.Context context) {
+          return pw.Table.fromTextArray(
+            headers: ["ID", "Title", "Description", "Due Date", "Completed", "Repeating", "Repeat Interval"],
+            data: _tasks.map((task) {
+              return [
+                task['id'],
+                task['title'],
+                task['description'],
+                task['dueDate'],
+                task['isCompleted'] ? "Yes" : "No",
+                task['isRepeating'] ? "Yes" : "No",
+                task['repeatInterval'] ?? "None",
+              ];
+            }).toList(),
+          );
+        },
+      ),
+    );
+
+    final directory = await getApplicationDocumentsDirectory();
+    final path = "${directory.path}/tasks.pdf";
+    final file = File(path);
+    await file.writeAsBytes(await pdf.save());
+
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('PDF file saved at: $path')));
+  }
+
+  // Export tasks via Email
+  void _exportToEmail() async {
+    final email = Email(
+      body: 'Tasks exported from Task Manager App: \n\n' + _tasks.map((task) {
+        return "ID: ${task['id']}\nTitle: ${task['title']}\nDescription: ${task['description']}\nDue Date: ${task['dueDate']}\nCompleted: ${task['isCompleted'] ? "Yes" : "No"}\n\n";
+      }).join(),
+      subject: 'Task Export',
+      recipients: ['recipient@example.com'],
+      isHTML: false,
+    );
+    
+    await FlutterEmailSender.send(email);
+
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Tasks sent via email')));
+  }
+
   // Check if task is due today and show notification
   void _checkIfTaskIsDueToday(Map<String, dynamic> task) {
     DateTime now = DateTime.now();
@@ -188,221 +264,78 @@ class _TaskHomePageState extends State<TaskHomePage> with SingleTickerProviderSt
         child: Icon(Icons.add),
       ),
       persistentFooterButtons: [
-        TextButton(
-          onPressed: _exportTasksToCSV,
-          child: Text("Export to CSV"),
+        ElevatedButton(
+          onPressed: _exportToCSV,
+          child: Text('Export to CSV'),
         ),
-        TextButton(
-          onPressed: _exportTasksToPDF,
-          child: Text("Export to PDF"),
+        ElevatedButton(
+          onPressed: _exportToPDF,
+          child: Text('Export to PDF'),
         ),
-        TextButton(
-          onPressed: _sendTasksByEmail,
-          child: Text("Send by Email"),
+        ElevatedButton(
+          onPressed: _exportToEmail,
+          child: Text('Email Tasks'),
         ),
       ],
     );
   }
 
-  // Function to build task list
+  // Build task list
   Widget _buildTaskList(List<Map<String, dynamic>> tasks) {
     return ListView.builder(
       itemCount: tasks.length,
       itemBuilder: (context, index) {
-        var task = tasks[index];
+        Map<String, dynamic> task = tasks[index];
         return ListTile(
-          title: Row(
-            children: [
-              Text(task['title']),
-              if (task['repeatInterval'] != 'None') ...[
-                SizedBox(width: 8),
-                Text(
-                  '(Repeated)',
-                  style: TextStyle(color: Colors.blue, fontStyle: FontStyle.italic),
-                ),
-              ],
-            ],
-          ),
+          title: Text(task['title']),
           subtitle: Text(task['description']),
-          trailing: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              IconButton(
-                icon: Icon(Icons.edit),
-                onPressed: () => _showEditTaskDialog(context, task),
-              ),
-              IconButton(
-                icon: Icon(Icons.check),
-                onPressed: () {
-                  setState(() {
-                    task['isCompleted'] = true; // Mark as completed
-                  });
-                },
-              ),
-              IconButton(
-                icon: Icon(Icons.delete),
-                onPressed: () {
-                  // Show delete confirmation dialog
-                  showDialog(
-                    context: context,
-                    builder: (context) {
-                      return AlertDialog(
-                        title: Text('Delete Task'),
-                        content: Text('Are you sure you want to delete this task?'),
-                        actions: [
-                          TextButton(
-                            onPressed: () {
-                              Navigator.pop(context); // Cancel the deletion
-                            },
-                            child: Text('Cancel'),
-                          ),
-                          TextButton(
-                            onPressed: () {
-                              setState(() {
-                                _tasks.removeAt(index); // Remove task from list
-                              });
-                              Navigator.pop(context); // Close the dialog
-                            },
-                            child: Text('Delete'),
-                          ),
-                        ],
-                      );
-                    },
-                  );
-                },
-              ),
-            ],
+          trailing: IconButton(
+            icon: Icon(Icons.check),
+            onPressed: () {
+              setState(() {
+                task['isCompleted'] = true;
+              });
+              _checkIfTaskIsDueToday(task); // Check if task is due today
+            },
           ),
         );
       },
     );
   }
 
-  // Function to export tasks to CSV
-  void _exportTasksToCSV() async {
-    List<List<dynamic>> rows = [
-      ["ID", "Title", "Description", "Due Date", "Completed"]
-    ];
-
-    for (var task in _tasks) {
-      rows.add([
-        task['id'],
-        task['title'],
-        task['description'],
-        task['dueDate'],
-        task['isCompleted'] ? 'Yes' : 'No',
-      ]);
-    }
-
-    String csv = const ListToCsvConverter().convert(rows);
-    final directory = await getApplicationDocumentsDirectory();
-    final file = File('${directory.path}/tasks.csv');
-    await file.writeAsString(csv);
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Tasks exported to CSV')));
-  }
-
-  // Function to export tasks to PDF
-  void _exportTasksToPDF() async {
-    final pdf = pw.Document();
-    pdf.addPage(pw.Page(build: (pw.Context context) {
-      return pw.Column(
-        children: [
-          pw.Text("Task List", style: pw.TextStyle(fontSize: 24, fontWeight: pw.FontWeight.bold)),
-          pw.SizedBox(height: 20),
-          pw.Table.fromTextArray(headers: ["ID", "Title", "Description", "Due Date", "Completed"], data: [
-            for (var task in _tasks)
-              [
-                task['id'],
-                task['title'],
-                task['description'],
-                task['dueDate'],
-                task['isCompleted'] ? 'Yes' : 'No',
-              ],
-          ]),
-        ],
-      );
-    }));
-
-    final directory = await getApplicationDocumentsDirectory();
-    final file = File('${directory.path}/tasks.pdf');
-    await file.writeAsBytes(await pdf.save());
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Tasks exported to PDF')));
-  }
-
-  // Function to send tasks by email
-  void _sendTasksByEmail() async {
-    final Email email = Email(
-      body: _generateTaskSummary(),
-      subject: 'Tasks Report',
-      recipients: ['recipient@example.com'],
-      isHTML: false,
-    );
-
-    await FlutterEmailSender.send(email);
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Tasks sent via email')));
-  }
-
-  // Function to generate task summary for email
-  String _generateTaskSummary() {
-    StringBuffer sb = StringBuffer();
-    sb.writeln('Task Summary\n');
-    for (var task in _tasks) {
-      sb.writeln('Title: ${task['title']}');
-      sb.writeln('Description: ${task['description']}');
-      sb.writeln('Due Date: ${task['dueDate']}');
-      sb.writeln('Completed: ${task['isCompleted'] ? 'Yes' : 'No'}\n');
-    }
-    return sb.toString();
-  }
-
-  // Function to show add task dialog (simplified)
+  // Show dialog to add new task
   void _showAddTaskDialog(BuildContext context) {
+    TextEditingController titleController = TextEditingController();
+    TextEditingController descriptionController = TextEditingController();
     showDialog(
       context: context,
-      builder: (context) {
+      builder: (BuildContext context) {
         return AlertDialog(
-          title: Text("Add Task"),
+          title: Text('Add Task'),
           content: Column(
-            mainAxisSize: MainAxisSize.min,
             children: [
-              TextField(
-                decoration: InputDecoration(labelText: 'Task Title'),
-              ),
-              TextField(
-                decoration: InputDecoration(labelText: 'Task Description'),
-              ),
+              TextField(controller: titleController, decoration: InputDecoration(labelText: 'Title')),
+              TextField(controller: descriptionController, decoration: InputDecoration(labelText: 'Description')),
             ],
           ),
           actions: [
-            TextButton(onPressed: () {}, child: Text('Add')),
-          ],
-        );
-      },
-    );
-  }
-
-  // Function to show edit task dialog (simplified)
-  void _showEditTaskDialog(BuildContext context, Map<String, dynamic> task) {
-    showDialog(
-      context: context,
-      builder: (context) {
-        return AlertDialog(
-          title: Text("Edit Task"),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: TextEditingController(text: task['title']),
-                decoration: InputDecoration(labelText: 'Task Title'),
-              ),
-              TextField(
-                controller: TextEditingController(text: task['description']),
-                decoration: InputDecoration(labelText: 'Task Description'),
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(onPressed: () {}, child: Text('Save')),
+            TextButton(
+              onPressed: () {
+                setState(() {
+                  _tasks.add({
+                    'id': _tasks.length + 1,
+                    'title': titleController.text,
+                    'description': descriptionController.text,
+                    'dueDate': DateTime.now().add(Duration(minutes: 5)).toIso8601String(),
+                    'isCompleted': false,
+                    'isRepeating': false,
+                    'repeatInterval': null,
+                  });
+                });
+                Navigator.pop(context);
+              },
+              child: Text('Add'),
+            ),
           ],
         );
       },
