@@ -28,13 +28,7 @@ class _TaskHomePageState extends State<TaskHomePage> with SingleTickerProviderSt
 
     if (!isWeb) {
       _initializeNotifications();
-      if (defaultTargetPlatform == TargetPlatform.iOS) {
-        flutterLocalNotificationsPlugin!.resolvePlatformSpecificImplementation<IOSFlutterLocalNotificationsPlugin>()?.requestPermissions(
-          alert: true,
-          badge: true,
-          sound: true,
-        );
-      }
+      _requestNotificationPermission();
     }
     _loadDummyTasks();
   }
@@ -45,6 +39,14 @@ class _TaskHomePageState extends State<TaskHomePage> with SingleTickerProviderSt
     var initializationSettingsAndroid = AndroidInitializationSettings('@mipmap/ic_launcher');
     var initializationSettings = InitializationSettings(android: initializationSettingsAndroid);
     flutterLocalNotificationsPlugin!.initialize(initializationSettings);
+  }
+
+  // Request notification permission (iOS)
+  void _requestNotificationPermission() {
+    if (defaultTargetPlatform == TargetPlatform.iOS) {
+      flutterLocalNotificationsPlugin!.resolvePlatformSpecificImplementation<IOSFlutterLocalNotificationsPlugin>()
+          ?.requestPermissions(alert: true, badge: true, sound: true);
+    }
   }
 
   // Dummy function to load tasks (for testing purposes)
@@ -287,12 +289,14 @@ class _TaskHomePageState extends State<TaskHomePage> with SingleTickerProviderSt
                     'isRepeating': isRepeating,
                     'repeatInterval': repeatInterval,
                   });
-                  // If the task is repeating, it will automatically appear in the Repeated Tasks tab
-                  _showNotification(titleController.text); // Show notification
+                  // If the task is repeating, it will automatically appear in the repeated tasks tab
+                  if (isRepeating) {
+                    _showNotification(titleController.text);
+                  }
                 });
                 Navigator.pop(context);
               },
-              child: Text('Add Task'),
+              child: Text('Save Task'),
             ),
           ],
         );
@@ -300,7 +304,7 @@ class _TaskHomePageState extends State<TaskHomePage> with SingleTickerProviderSt
     );
   }
 
-  // Dialog to edit a task (if necessary)
+  // Dialog to edit an existing task
   void _showEditTaskDialog(BuildContext context, Map<String, dynamic> task) {
     final titleController = TextEditingController(text: task['title']);
     final descriptionController = TextEditingController(text: task['description']);
