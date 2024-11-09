@@ -251,37 +251,23 @@ class _TaskHomePageState extends State<TaskHomePage> with SingleTickerProviderSt
     );
   }
 
-  // Build task list view
   Widget _buildTaskList(List<Map<String, dynamic>> tasks) {
     return ListView.builder(
       itemCount: tasks.length,
       itemBuilder: (context, index) {
-        var task = tasks[index];
+        final task = tasks[index];
         return ListTile(
           title: Text(task['title']),
           subtitle: Text(task['description']),
-          trailing: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              IconButton(icon: Icon(Icons.edit), onPressed: () => _showEditTaskDialog(context, task)),
-              IconButton(
-                icon: Icon(Icons.check),
-                onPressed: () {
-                  setState(() {
-                    task['isCompleted'] = true;
-                  });
-                },
-              ),
-              IconButton(
-                icon: Icon(Icons.delete),
-                onPressed: () {
-                  setState(() {
-                    _tasks.removeAt(index);
-                  });
-                },
-              ),
-            ],
+          trailing: Checkbox(
+            value: task['isCompleted'],
+            onChanged: (bool? value) {
+              setState(() {
+                task['isCompleted'] = value ?? false;
+              });
+            },
           ),
+          onTap: () => _showEditTaskDialog(context, task),
         );
       },
     );
@@ -291,149 +277,149 @@ class _TaskHomePageState extends State<TaskHomePage> with SingleTickerProviderSt
   List<Map<String, dynamic>> _getCompletedTasks() => _tasks.where((task) => task['isCompleted']).toList();
   List<Map<String, dynamic>> _getRepeatedTasks() => _tasks.where((task) => task['repeatDays'] != null).toList();
 
-  // Show add task dialog with date and time selection
-  void _showAddTaskDialog(BuildContext context) {
-    final taskController = TextEditingController();
-    final descriptionController = TextEditingController();
-    DateTime? selectedDate = DateTime.now();
-    TimeOfDay selectedTime = TimeOfDay.now();
+  
 
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text('Add Task'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: taskController,
-              decoration: InputDecoration(labelText: 'Task Title'),
-            ),
-            TextField(
-              controller: descriptionController,
-              decoration: InputDecoration(labelText: 'Task Description'),
-            ),
-            TextButton(
-              onPressed: () async {
-                selectedDate = await showDatePicker(
-                  context: context,
-                  initialDate: selectedDate!,
-                  firstDate: DateTime(2020),
-                  lastDate: DateTime(2101),
-                );
-              },
-              child: Text("Select Due Date: ${selectedDate.toLocal()}"),
-            ),
-            TextButton(
-              onPressed: () async {
-                selectedTime = await showTimePicker(
-                  context: context,
-                  initialTime: selectedTime,
-                ) ?? selectedTime;
-              },
-              child: Text("Select Time: ${selectedTime.format(context)}"),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () {
-              Navigator.pop(context);
-            },
-            child: Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () {
-              if (selectedDate != null) {
-                setState(() {
-                  _tasks.add({
-                    'id': _tasks.length + 1,
-                    'title': taskController.text,
-                    'description': descriptionController.text,
-                    'dueDate': DateTime(selectedDate.year, selectedDate.month, selectedDate.day, selectedTime.hour, selectedTime.minute).toIso8601String(),
-                    'isCompleted': false,
-                    'repeatDays': 'daily',
+// Show dialog to add a new task
+void _showAddTaskDialog(BuildContext context) {
+  final TextEditingController titleController = TextEditingController();
+  final TextEditingController descriptionController = TextEditingController();
+  final TextEditingController dueDateController = TextEditingController();
+  String? selectedRepeat = 'None';
+
+  showDialog(
+    context: context,
+    builder: (BuildContext context) {
+      return AlertDialog(
+        title: Text("Add Task"),
+        content: SingleChildScrollView(
+          child: Column(
+            children: [
+              TextField(
+                controller: titleController,
+                decoration: InputDecoration(labelText: 'Task Title'),
+              ),
+              TextField(
+                controller: descriptionController,
+                decoration: InputDecoration(labelText: 'Task Description'),
+              ),
+              TextField(
+                controller: dueDateController,
+                decoration: InputDecoration(labelText: 'Due Date (YYYY-MM-DD HH:MM)'),
+              ),
+              DropdownButtonFormField<String>(
+                value: selectedRepeat,
+                decoration: InputDecoration(labelText: 'Repeat'),
+                items: ['None', 'Daily', 'Weekly', 'Monthly'].map((String value) {
+                  return DropdownMenuItem<String>(
+                    value: value,
+                    child: Text(value),
+                  );
+                }).toList(),
+                onChanged: (newValue) {
+                  setState(() {
+                    selectedRepeat = newValue;
                   });
-                  _scheduleNotification(_tasks.last); // Schedule notification
-                });
-              }
-              Navigator.pop(context);
-            },
-            child: Text('Save'),
+                },
+              ),
+            ],
           ),
-        ],
-      ),
-    );
-  }
-
-  // Show edit task dialog
-  void _showEditTaskDialog(BuildContext context, Map<String, dynamic> task) {
-    final taskController = TextEditingController(text: task['title']);
-    final descriptionController = TextEditingController(text: task['description']);
-    DateTime? selectedDate = DateTime.parse(task['dueDate']);
-    TimeOfDay selectedTime = TimeOfDay.fromDateTime(DateTime.parse(task['dueDate']));
-
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text('Edit Task'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: taskController,
-              decoration: InputDecoration(labelText: 'Task Title'),
-              onChanged: (value) {
-                task['title'] = value;
-              },
-            ),
-            TextField(
-              controller: descriptionController,
-              decoration: InputDecoration(labelText: 'Task Description'),
-              onChanged: (value) {
-                task['description'] = value;
-              },
-            ),
-            TextButton(
-              onPressed: () async {
-                selectedDate = await showDatePicker(
-                  context: context,
-                  initialDate: selectedDate!,
-                  firstDate: DateTime(2020),
-                  lastDate: DateTime(2101),
-                );
-              },
-              child: Text("Select Due Date: ${selectedDate.toLocal()}"),
-            ),
-            TextButton(
-              onPressed: () async {
-                selectedTime = await showTimePicker(
-                  context: context,
-                  initialTime: selectedTime,
-                ) ?? selectedTime;
-              },
-              child: Text("Select Time: ${selectedTime.format(context)}"),
-            ),
-          ],
         ),
         actions: [
           TextButton(
             onPressed: () {
-              Navigator.pop(context);
+              Navigator.of(context).pop();
             },
-            child: Text('Cancel'),
+            child: Text("Cancel"),
           ),
           TextButton(
             onPressed: () {
               setState(() {
-                task['dueDate'] = DateTime(selectedDate!.year, selectedDate.month, selectedDate.day, selectedTime.hour, selectedTime.minute).toIso8601String();
+                _tasks.add({
+                  'id': _tasks.length + 1, // Simple unique ID for each task
+                  'title': titleController.text,
+                  'description': descriptionController.text,
+                  'dueDate': dueDateController.text,
+                  'isCompleted': false,
+                  'repeatDays': selectedRepeat,
+                });
               });
-              Navigator.pop(context);
+              Navigator.of(context).pop();
             },
-            child: Text('Save'),
+            child: Text("Add"),
           ),
         ],
-      ),
-    );
-  }
+      );
+    },
+  );
+}
+
+// Show dialog to edit an existing task
+void _showEditTaskDialog(BuildContext context, Map<String, dynamic> task) {
+  final TextEditingController titleController = TextEditingController(text: task['title']);
+  final TextEditingController descriptionController = TextEditingController(text: task['description']);
+  final TextEditingController dueDateController = TextEditingController(text: task['dueDate']);
+  String? selectedRepeat = task['repeatDays'];
+
+  showDialog(
+    context: context,
+    builder: (BuildContext context) {
+      return AlertDialog(
+        title: Text("Edit Task"),
+        content: SingleChildScrollView(
+          child: Column(
+            children: [
+              TextField(
+                controller: titleController,
+                decoration: InputDecoration(labelText: 'Task Title'),
+              ),
+              TextField(
+                controller: descriptionController,
+                decoration: InputDecoration(labelText: 'Task Description'),
+              ),
+              TextField(
+                controller: dueDateController,
+                decoration: InputDecoration(labelText: 'Due Date (YYYY-MM-DD HH:MM)'),
+              ),
+              DropdownButtonFormField<String>(
+                value: selectedRepeat,
+                decoration: InputDecoration(labelText: 'Repeat'),
+                items: ['None', 'Daily', 'Weekly', 'Monthly'].map((String value) {
+                  return DropdownMenuItem<String>(
+                    value: value,
+                    child: Text(value),
+                  );
+                }).toList(),
+                onChanged: (newValue) {
+                  setState(() {
+                    selectedRepeat = newValue;
+                  });
+                },
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.of(context).pop();
+            },
+            child: Text("Cancel"),
+          ),
+          TextButton(
+            onPressed: () {
+              setState(() {
+                task['title'] = titleController.text;
+                task['description'] = descriptionController.text;
+                task['dueDate'] = dueDateController.text;
+                task['repeatDays'] = selectedRepeat;
+              });
+              Navigator.of(context).pop();
+            },
+            child: Text("Save"),
+          ),
+        ],
+      );
+    },
+  );
+}
 }
