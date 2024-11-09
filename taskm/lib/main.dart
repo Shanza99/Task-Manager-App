@@ -1,21 +1,10 @@
-import 'dart:html' as html;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart'; // For date formatting
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
-import 'package:intl/intl.dart';
 
 void main() {
-  runApp(TaskManagerApp());
-}
-
-class TaskManagerApp extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    return MaterialApp(
-      debugShowCheckedModeBanner: false,
-      home: TaskHomePage(),
-    );
-  }
+  runApp(MaterialApp(home: TaskHomePage()));
 }
 
 class TaskHomePage extends StatefulWidget {
@@ -32,13 +21,13 @@ class _TaskHomePageState extends State<TaskHomePage> with SingleTickerProviderSt
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 5, vsync: this);  // Now 5 tabs
+    _tabController = TabController(length: 5, vsync: this);
     isWeb = (defaultTargetPlatform == TargetPlatform.linux ||
         defaultTargetPlatform == TargetPlatform.windows ||
         defaultTargetPlatform == TargetPlatform.macOS);
 
     if (!isWeb) {
-      _initializeNotifications(); // Initialize notifications for mobile/desktop
+      _initializeNotifications();
       if (defaultTargetPlatform == TargetPlatform.iOS) {
         flutterLocalNotificationsPlugin!.resolvePlatformSpecificImplementation<IOSFlutterLocalNotificationsPlugin>()?.requestPermissions(
           alert: true,
@@ -47,28 +36,15 @@ class _TaskHomePageState extends State<TaskHomePage> with SingleTickerProviderSt
         );
       }
     }
-    _loadDummyTasks(); // Load dummy tasks for testing
+    _loadDummyTasks();
   }
 
-  // Initialize local notifications for mobile/desktop platforms
+  // Initialize notifications
   void _initializeNotifications() {
     flutterLocalNotificationsPlugin = FlutterLocalNotificationsPlugin();
-    var initializationSettingsAndroid = AndroidInitializationSettings('app_icon');
+    var initializationSettingsAndroid = AndroidInitializationSettings('@mipmap/ic_launcher');
     var initializationSettings = InitializationSettings(android: initializationSettingsAndroid);
     flutterLocalNotificationsPlugin!.initialize(initializationSettings);
-  }
-
-  // Function for triggering web notifications
-  void showWebNotification(String title, String body) {
-    if (html.Notification.permission == "granted") {
-      html.Notification(title, body: body);
-    } else if (html.Notification.permission != "denied") {
-      html.Notification.requestPermission().then((permission) {
-        if (permission == "granted") {
-          html.Notification(title, body: body);
-        }
-      });
-    }
   }
 
   // Dummy function to load tasks (for testing purposes)
@@ -95,50 +71,6 @@ class _TaskHomePageState extends State<TaskHomePage> with SingleTickerProviderSt
     ];
   }
 
-  // Check if task is due today and show notification
-  void _checkIfTaskIsDueToday(Map<String, dynamic> task) {
-    DateTime now = DateTime.now();
-    DateTime taskDueDate = DateTime.parse(task['dueDate']);
-
-    // Compare only the year, month, and day (ignore time portion)
-    if (taskDueDate.year == now.year &&
-        taskDueDate.month == now.month &&
-        taskDueDate.day == now.day) {
-      if (task['isCompleted'] == false) {
-        _showNotificationForTask(task);
-      }
-    }
-  }
-
-  // Function to show notification for tasks due today
-  void _showNotificationForTask(Map<String, dynamic> task) {
-    if (isWeb) {
-      showWebNotification(
-        "Task Due Today: ${task['title']}",
-        "Don't forget to complete: ${task['description']}",
-      );
-    } else {
-      _showDesktopNotification(
-        "Task Due Today: ${task['title']}",
-        "Don't forget to complete: ${task['description']}",
-      );
-    }
-  }
-
-  // Function to show desktop notification (Flutter Local Notifications)
-  void _showDesktopNotification(String title, String body) {
-    var androidDetails = AndroidNotificationDetails(
-      'task_channel_id',
-      'Task Notifications',
-      channelDescription: 'Channel for task notifications',
-      importance: Importance.high,
-      priority: Priority.high,
-    );
-    var generalNotificationDetails = NotificationDetails(android: androidDetails);
-    flutterLocalNotificationsPlugin!
-        .show(0, title, body, generalNotificationDetails);
-  }
-
   // Fetch tasks for different tabs
   List<Map<String, dynamic>> _getTasksForToday() {
     final today = DateTime.now();
@@ -147,7 +79,7 @@ class _TaskHomePageState extends State<TaskHomePage> with SingleTickerProviderSt
       return dueDate.year == today.year &&
           dueDate.month == today.month &&
           dueDate.day == today.day &&
-          task['isCompleted'] == false;  // Only show non-completed tasks
+          task['isCompleted'] == false;
     }).toList();
   }
 
@@ -170,7 +102,7 @@ class _TaskHomePageState extends State<TaskHomePage> with SingleTickerProviderSt
             Tab(text: 'All Tasks'),
             Tab(text: 'Today\'s Tasks'),
             Tab(text: 'Completed'),
-            Tab(text: 'Repeated Tasks'),  // New Tab for repeated tasks
+            Tab(text: 'Repeated Tasks'),
           ],
         ),
       ),
@@ -180,7 +112,7 @@ class _TaskHomePageState extends State<TaskHomePage> with SingleTickerProviderSt
           _buildTaskList(_tasks),
           _buildTaskList(_getTasksForToday()),
           _buildTaskList(_getCompletedTasks()),
-          _buildTaskList(_getRepeatedTasks()),  // Show repeated tasks in this tab
+          _buildTaskList(_getRepeatedTasks()), // Show repeated tasks in this tab
         ],
       ),
       floatingActionButton: FloatingActionButton(
@@ -217,152 +149,13 @@ class _TaskHomePageState extends State<TaskHomePage> with SingleTickerProviderSt
               IconButton(
                 icon: Icon(Icons.delete),
                 onPressed: () {
-                  // Show delete confirmation dialog
-                  showDialog(
-                    context: context,
-                    builder: (context) {
-                      return AlertDialog(
-                        title: Text('Delete Task'),
-                        content: Text('Are you sure you want to delete this task?'),
-                        actions: [
-                          TextButton(
-                            onPressed: () {
-                              Navigator.pop(context); // Cancel the deletion
-                            },
-                            child: Text('Cancel'),
-                          ),
-                          TextButton(
-                            onPressed: () {
-                              setState(() {
-                                _tasks.removeAt(index); // Remove task from list
-                              });
-                              Navigator.pop(context); // Close the dialog
-                            },
-                            child: Text('Delete'),
-                          ),
-                        ],
-                      );
-                    },
-                  );
+                  setState(() {
+                    _tasks.removeAt(index); // Remove task from list
+                  });
                 },
               ),
             ],
           ),
-        );
-      },
-    );
-  }
-
-  // Dialog to edit a task
-  void _showEditTaskDialog(BuildContext context, Map<String, dynamic> task) {
-    final titleController = TextEditingController(text: task['title']);
-    final descriptionController = TextEditingController(text: task['description']);
-    DateTime selectedDate = DateTime.parse(task['dueDate']);
-    bool isRepeating = task['isRepeating'];
-    String repeatInterval = task['repeatInterval'] ?? 'None';
-
-    showDialog(
-      context: context,
-      builder: (context) {
-        return AlertDialog(
-          title: Text('Edit Task'),
-          content: Column(
-            children: [
-              TextField(
-                controller: titleController,
-                decoration: InputDecoration(labelText: 'Title'),
-              ),
-              TextField(
-                controller: descriptionController,
-                decoration: InputDecoration(labelText: 'Description'),
-              ),
-              // DateTime Picker
-              Row(
-                children: [
-                  Text("Due Date: ${DateFormat('yyyy-MM-dd').format(selectedDate)}"),
-                  IconButton(
-                    icon: Icon(Icons.calendar_today),
-                    onPressed: () async {
-                      DateTime? pickedDate = await showDatePicker(
-                        context: context,
-                        initialDate: selectedDate,
-                        firstDate: DateTime(2000),
-                        lastDate: DateTime(2100),
-                      );
-                      if (pickedDate != null && pickedDate != selectedDate) {
-                        setState(() {
-                          selectedDate = pickedDate;
-                        });
-                      }
-                    },
-                  ),
-                ],
-              ),
-              Row(
-                children: [
-                  Text("Time: ${DateFormat('HH:mm').format(selectedDate)}"),
-                  IconButton(
-                    icon: Icon(Icons.access_time),
-                    onPressed: () async {
-                      TimeOfDay? pickedTime = await showTimePicker(
-                        context: context,
-                        initialTime: TimeOfDay.fromDateTime(selectedDate),
-                      );
-                      if (pickedTime != null) {
-                        setState(() {
-                          selectedDate = DateTime(
-                            selectedDate.year,
-                            selectedDate.month,
-                            selectedDate.day,
-                            pickedTime.hour,
-                            pickedTime.minute,
-                          );
-                        });
-                      }
-                    },
-                  ),
-                ],
-              ),
-              // Repeating task selection
-              Row(
-                children: [
-                  Text("Repeat: "),
-                  DropdownButton<String>(
-                    value: repeatInterval,
-                    items: ['None', 'Daily', 'Weekly', 'Monthly']
-                        .map((String value) {
-                          return DropdownMenuItem<String>(
-                            value: value,
-                            child: Text(value),
-                          );
-                        }).toList(),
-                    onChanged: (value) {
-                      setState(() {
-                        repeatInterval = value!;
-                      });
-                    },
-                  ),
-                ],
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () {
-                setState(() {
-                  task['title'] = titleController.text;
-                  task['description'] = descriptionController.text;
-                  task['dueDate'] = selectedDate.toIso8601String();
-                  task['isRepeating'] = isRepeating;
-                  task['repeatInterval'] = repeatInterval;
-                  // After saving, check if task is due today
-                  _checkIfTaskIsDueToday(task);
-                });
-                Navigator.pop(context);
-              },
-              child: Text('Save Task'),
-            ),
-          ],
         );
       },
     );
@@ -444,7 +237,7 @@ class _TaskHomePageState extends State<TaskHomePage> with SingleTickerProviderSt
                   Text("Repeat: "),
                   DropdownButton<String>(
                     value: repeatInterval,
-                    items: ['None', 'Daily', 'Weekly', 'Monthly']
+                    items: ['None', 'Daily', 'Weekly', 'Monthly', 'Yearly']
                         .map((String value) {
                           return DropdownMenuItem<String>(
                             value: value,
@@ -454,6 +247,7 @@ class _TaskHomePageState extends State<TaskHomePage> with SingleTickerProviderSt
                     onChanged: (value) {
                       setState(() {
                         repeatInterval = value!;
+                        isRepeating = repeatInterval != 'None';  // Set isRepeating flag
                       });
                     },
                   ),
@@ -474,12 +268,125 @@ class _TaskHomePageState extends State<TaskHomePage> with SingleTickerProviderSt
                     'isRepeating': isRepeating,
                     'repeatInterval': repeatInterval,
                   });
-                  // Check if the newly created task is due today
-                  _checkIfTaskIsDueToday(_tasks.last);
+                  // If the task is repeating, it will automatically appear in the Repeated Tasks tab
                 });
                 Navigator.pop(context);
               },
               child: Text('Add Task'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  // Dialog to edit a task (if necessary)
+  void _showEditTaskDialog(BuildContext context, Map<String, dynamic> task) {
+    final titleController = TextEditingController(text: task['title']);
+    final descriptionController = TextEditingController(text: task['description']);
+    DateTime selectedDate = DateTime.parse(task['dueDate']);
+    bool isRepeating = task['isRepeating'];
+    String repeatInterval = task['repeatInterval'];
+
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: Text('Edit Task'),
+          content: Column(
+            children: [
+              TextField(
+                controller: titleController,
+                decoration: InputDecoration(labelText: 'Title'),
+              ),
+              TextField(
+                controller: descriptionController,
+                decoration: InputDecoration(labelText: 'Description'),
+              ),
+              // DateTime Picker
+              Row(
+                children: [
+                  Text("Due Date: ${DateFormat('yyyy-MM-dd').format(selectedDate)}"),
+                  IconButton(
+                    icon: Icon(Icons.calendar_today),
+                    onPressed: () async {
+                      DateTime? pickedDate = await showDatePicker(
+                        context: context,
+                        initialDate: selectedDate,
+                        firstDate: DateTime(2000),
+                        lastDate: DateTime(2100),
+                      );
+                      if (pickedDate != null && pickedDate != selectedDate) {
+                        setState(() {
+                          selectedDate = pickedDate;
+                        });
+                      }
+                    },
+                  ),
+                ],
+              ),
+              Row(
+                children: [
+                  Text("Time: ${DateFormat('HH:mm').format(selectedDate)}"),
+                  IconButton(
+                    icon: Icon(Icons.access_time),
+                    onPressed: () async {
+                      TimeOfDay? pickedTime = await showTimePicker(
+                        context: context,
+                        initialTime: TimeOfDay.fromDateTime(selectedDate),
+                      );
+                      if (pickedTime != null) {
+                        setState(() {
+                          selectedDate = DateTime(
+                            selectedDate.year,
+                            selectedDate.month,
+                            selectedDate.day,
+                            pickedTime.hour,
+                            pickedTime.minute,
+                          );
+                        });
+                      }
+                    },
+                  ),
+                ],
+              ),
+              // Repeating task selection
+              Row(
+                children: [
+                  Text("Repeat: "),
+                  DropdownButton<String>(
+                    value: repeatInterval,
+                    items: ['None', 'Daily', 'Weekly', 'Monthly', 'Yearly']
+                        .map((String value) {
+                          return DropdownMenuItem<String>(
+                            value: value,
+                            child: Text(value),
+                          );
+                        }).toList(),
+                    onChanged: (value) {
+                      setState(() {
+                        repeatInterval = value!;
+                        isRepeating = repeatInterval != 'None';  // Set isRepeating flag
+                      });
+                    },
+                  ),
+                ],
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                setState(() {
+                  task['title'] = titleController.text;
+                  task['description'] = descriptionController.text;
+                  task['dueDate'] = selectedDate.toIso8601String();
+                  task['isRepeating'] = isRepeating;
+                  task['repeatInterval'] = repeatInterval;
+                });
+                Navigator.pop(context);
+              },
+              child: Text('Save Changes'),
             ),
           ],
         );
