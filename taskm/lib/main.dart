@@ -47,7 +47,7 @@ class _TaskHomePageState extends State<TaskHomePage> with SingleTickerProviderSt
         path,
         version: 1,
         onCreate: (db, version) {
-          db.execute('''
+          db.execute(''' 
             CREATE TABLE tasks (
               id INTEGER PRIMARY KEY,
               title TEXT,
@@ -107,17 +107,167 @@ class _TaskHomePageState extends State<TaskHomePage> with SingleTickerProviderSt
     await prefs.setStringList('tasks', taskList);
   }
 
-Future<void> _loadTasksFromSharedPreferences() async {
-  SharedPreferences prefs = await SharedPreferences.getInstance();
-  List<String>? taskList = prefs.getStringList('tasks');
-  
-  setState(() {
-    _tasks = taskList != null 
-      ? taskList.map((task) => Map<String, dynamic>.from(jsonDecode(task))).toList() 
-      : [];
-  });
-}
+  Future<void> _loadTasksFromSharedPreferences() async {
+    SharedPreferences prefs = await SharedPreferences.getInstance();
+    List<String>? taskList = prefs.getStringList('tasks');
+    
+    setState(() {
+      _tasks = taskList != null 
+        ? taskList.map((task) => Map<String, dynamic>.from(jsonDecode(task))).toList() 
+        : [];
+    });
+  }
 
+  Future<void> _markTaskAsDone(int index) async {
+    if (_isWeb) {
+      _tasks[index]['isCompleted'] = 1;
+      await _saveTasksToSharedPreferences();
+    } else if (_database != null) {
+      int taskId = _tasks[index]['id'];
+      await _database!.update(
+        'tasks',
+        {'isCompleted': 1},
+        where: 'id = ?',
+        whereArgs: [taskId],
+      );
+    }
+    _fetchTasks();
+  }
+
+  Future<void> _editTask(int index) async {
+    final titleController = TextEditingController(text: _tasks[index]['title']);
+    final descriptionController = TextEditingController(text: _tasks[index]['description']);
+    DateTime selectedDate = DateTime.parse(_tasks[index]['dueDate']);
+
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: Text('Edit Task'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: titleController,
+                decoration: InputDecoration(labelText: 'Task Title'),
+              ),
+              TextField(
+                controller: descriptionController,
+                decoration: InputDecoration(labelText: 'Task Description'),
+              ),
+              ElevatedButton(
+                onPressed: () async {
+                  final pickedDate = await showDatePicker(
+                    context: context,
+                    initialDate: selectedDate,
+                    firstDate: DateTime.now(),
+                    lastDate: DateTime(2100),
+                  );
+                  if (pickedDate != null) {
+                    selectedDate = pickedDate;
+                  }
+                },
+                child: Text('Pick Due Date'),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: Text('Cancel'),
+            ),
+            TextButton(
+              onPressed: () {
+                final title = titleController.text;
+                final description = descriptionController.text;
+                if (title.isNotEmpty && description.isNotEmpty) {
+                  _updateTask(index, title, description, selectedDate);
+                  Navigator.of(context).pop();
+                }
+              },
+              child: Text('Update Task'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Future<void> _updateTask(int index, String title, String description, DateTime dueDate) async {
+    final updatedTask = {
+      'title': title,
+      'description': description,
+      'dueDate': dueDate.toIso8601String(),
+    };
+
+    if (_isWeb) {
+      _tasks[index] = {..._tasks[index], ...updatedTask};
+      await _saveTasksToSharedPreferences();
+    } else if (_database != null) {
+      int taskId = _tasks[index]['id'];
+      await _database!.update(
+        'tasks',
+        updatedTask,
+        where: 'id = ?',
+        whereArgs: [taskId],
+      );
+    }
+    _fetchTasks();
+  }
+
+  Widget _buildTaskList(List<Map<String, dynamic>> tasks) {
+    if (tasks.isEmpty) {
+      return Center(child: Text('No tasks available.'));
+    }
+    return ListView.builder(
+      itemCount: tasks.length,
+      itemBuilder: (context, index) {
+        final task = tasks[index];
+        return ListTile(
+          title: Text(task['title']),
+          subtitle: Text(task['description']),
+          leading: Checkbox(
+            value: task['isCompleted'] == 1,
+            onChanged: (value) {
+              _markTaskAsDone(index);
+            },
+          ),
+          trailing: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              IconButton(
+                icon: Icon(Icons.edit),
+                onPressed: () => _editTask(index),
+              ),
+              IconButton(
+                icon: Icon(Icons.delete),
+                onPressed: () => _deleteTask(index),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  List<Map<String, dynamic>> _getTasksForToday() {
+    final today = DateTime.now();
+    return _tasks.where((task) {
+      final dueDate = DateTime.parse(task['dueDate']);
+      return dueDate.year == today.year &&
+          dueDate.month == today.month &&
+          dueDate.day == today.day &&
+          task['isCompleted'] == 0;
+    }).toList();
+  }
+
+  List<Map<String, dynamic>> _getCompletedTasks() {
+    return _tasks.where((task) => task['isCompleted'] == 1).toList();
+  }
+
+  List<Map<String, dynamic>> _getRepeatedTasks() {
+    return _tasks.where((task) => task['repeatDays'] != null && task['repeatDays'] != '').toList();
+  }
 
   void _showAddTaskDialog(BuildContext context) {
     final titleController = TextEditingController();
@@ -182,24 +332,24 @@ Future<void> _loadTasksFromSharedPreferences() async {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text('Task Manager'),
+        title: Text('Task Management'),
         bottom: TabBar(
           controller: _tabController,
           tabs: [
-            Tab(text: 'All Tasks'),
-            Tab(text: 'Today\'s Tasks'),
+            Tab(text: 'Today'),
             Tab(text: 'Completed'),
             Tab(text: 'Repeated'),
+            Tab(text: 'All'),
           ],
         ),
       ),
       body: TabBarView(
         controller: _tabController,
         children: [
-          _buildTaskList(_tasks),
           _buildTaskList(_getTasksForToday()),
           _buildTaskList(_getCompletedTasks()),
           _buildTaskList(_getRepeatedTasks()),
+          _buildTaskList(_tasks),
         ],
       ),
       floatingActionButton: FloatingActionButton(
@@ -207,44 +357,5 @@ Future<void> _loadTasksFromSharedPreferences() async {
         child: Icon(Icons.add),
       ),
     );
-  }
-
-  Widget _buildTaskList(List<Map<String, dynamic>> tasks) {
-    if (tasks.isEmpty) {
-      return Center(child: Text('No tasks available.'));
-    }
-    return ListView.builder(
-      itemCount: tasks.length,
-      itemBuilder: (context, index) {
-        final task = tasks[index];
-        return ListTile(
-          title: Text(task['title']),
-          subtitle: Text(task['description']),
-          trailing: IconButton(
-            icon: Icon(Icons.delete),
-            onPressed: () => _deleteTask(index),
-          ),
-        );
-      },
-    );
-  }
-
-  List<Map<String, dynamic>> _getTasksForToday() {
-    final today = DateTime.now();
-    return _tasks.where((task) {
-      final dueDate = DateTime.parse(task['dueDate']);
-      return dueDate.year == today.year &&
-          dueDate.month == today.month &&
-          dueDate.day == today.day &&
-          task['isCompleted'] == 0;
-    }).toList();
-  }
-
-  List<Map<String, dynamic>> _getCompletedTasks() {
-    return _tasks.where((task) => task['isCompleted'] == 1).toList();
-  }
-
-  List<Map<String, dynamic>> _getRepeatedTasks() {
-    return _tasks.where((task) => task['repeatDays'] != null && task['repeatDays'] != '').toList();
   }
 }
