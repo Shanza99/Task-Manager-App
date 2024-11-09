@@ -44,6 +44,16 @@ class _TaskHomePageState extends State<TaskHomePage> with SingleTickerProviderSt
     _isWeb = kIsWeb;
     flutterLocalNotificationsPlugin = FlutterLocalNotificationsPlugin();
     _initDatabase();
+    _initializeNotifications();
+  }
+
+  Future<void> _initializeNotifications() async {
+    const AndroidInitializationSettings initializationSettingsAndroid =
+        AndroidInitializationSettings('app_icon');
+    final InitializationSettings initializationSettings =
+        InitializationSettings(android: initializationSettingsAndroid);
+
+    await flutterLocalNotificationsPlugin.initialize(initializationSettings);
   }
 
   Future<void> _initDatabase() async {
@@ -98,7 +108,7 @@ class _TaskHomePageState extends State<TaskHomePage> with SingleTickerProviderSt
       await _database!.insert('tasks', newTask);
     }
     _fetchTasks();
-    _scheduleNotification(newTask);
+    _scheduleNotification(newTask); // Schedule notification for the new task
   }
 
   Future<void> _deleteTask(int index) async {
@@ -233,7 +243,7 @@ class _TaskHomePageState extends State<TaskHomePage> with SingleTickerProviderSt
 
   Future<void> _scheduleNotification(Map<String, dynamic> task) async {
     DateTime dueDate = DateTime.parse(task['dueDate']);
-    var scheduledTime = TZDateTime.from(dueDate, (await FlutterTimezone.getLocalTimezone()) as Location);
+    if (dueDate.isBefore(DateTime.now())) return;  // Don't schedule for past dates
 
     var androidDetails = AndroidNotificationDetails(
       'task_channel_id',
@@ -248,7 +258,7 @@ class _TaskHomePageState extends State<TaskHomePage> with SingleTickerProviderSt
       task['id'], // Unique id for the task
       task['title'],
       task['description'],
-      scheduledTime,
+      TZDateTime.from(dueDate, (await FlutterTimezone.getLocalTimezone()) as Location), // Use correct timezone
       notificationDetails,
       androidAllowWhileIdle: true,
       uiLocalNotificationDateInterpretation: UILocalNotificationDateInterpretation.absoluteTime,
@@ -275,20 +285,20 @@ class _TaskHomePageState extends State<TaskHomePage> with SingleTickerProviderSt
         bottom: TabBar(
           controller: _tabController,
           tabs: [
-            Tab(text: 'All Tasks'),
-            Tab(text: 'Today\'s Tasks'),
+            Tab(text: 'Today'),
             Tab(text: 'Completed'),
             Tab(text: 'Repeated'),
+            Tab(text: 'All'),
           ],
         ),
       ),
       body: TabBarView(
         controller: _tabController,
         children: [
-          _buildTaskListView(_tasks),
           _buildTaskListView(_getTasksForToday()),
           _buildTaskListView(_getCompletedTasks()),
           _buildTaskListView(_getRepeatedTasks()),
+          _buildTaskListView(_tasks),
         ],
       ),
       floatingActionButton: FloatingActionButton(
