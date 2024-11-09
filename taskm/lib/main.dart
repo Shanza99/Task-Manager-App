@@ -101,27 +101,90 @@ class _TaskHomePageState extends State<TaskHomePage> with SingleTickerProviderSt
     _fetchTasks();
   }
 
-  Future<void> _toggleTaskCompletion(int index) async {
-    if (_isWeb) {
-      _tasks[index]['isCompleted'] = _tasks[index]['isCompleted'] == 0 ? 1 : 0;
-      await _saveTasksToSharedPreferences();
-    } else if (_database != null) {
-      int id = _tasks[index]['id'];
-      int newStatus = _tasks[index]['isCompleted'] == 0 ? 1 : 0;
-      await _database!.update(
-        'tasks',
-        {'isCompleted': newStatus},
-        where: 'id = ?',
-        whereArgs: [id],
-      );
-    }
-    _fetchTasks();
+  Future<void> _saveTasksToSharedPreferences() async {
+    SharedPreferences prefs = await SharedPreferences.getInstance();
+    List<String> taskList = _tasks.map((task) => jsonEncode(task)).toList();
+    await prefs.setStringList('tasks', taskList);
+  }
+
+  Future<void> _loadTasksFromSharedPreferences() async {
+    SharedPreferences prefs = await SharedPreferences.getInstance();
+    List<String>? taskList = prefs.getStringList('tasks');
+    
+    setState(() {
+      _tasks = taskList != null 
+        ? taskList.map((task) => Map<String, dynamic>.from(jsonDecode(task))).toList() 
+        : [];
+    });
+  }
+
+  void _showAddTaskDialog(BuildContext context) {
+    final titleController = TextEditingController();
+    final descriptionController = TextEditingController();
+    DateTime selectedDate = DateTime.now();
+
+    if (!mounted) return;  // Check if the widget is still in the tree
+
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: Text('Add New Task'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: titleController,
+                decoration: InputDecoration(labelText: 'Task Title'),
+              ),
+              TextField(
+                controller: descriptionController,
+                decoration: InputDecoration(labelText: 'Task Description'),
+              ),
+              ElevatedButton(
+                onPressed: () async {
+                  final pickedDate = await showDatePicker(
+                    context: context,
+                    initialDate: selectedDate,
+                    firstDate: DateTime.now(),
+                    lastDate: DateTime(2100),
+                  );
+                  if (pickedDate != null) {
+                    selectedDate = pickedDate;
+                  }
+                },
+                child: Text('Pick Due Date'),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: Text('Cancel'),
+            ),
+            TextButton(
+              onPressed: () {
+                final title = titleController.text;
+                final description = descriptionController.text;
+                if (title.isNotEmpty && description.isNotEmpty) {
+                  _addTask(title, description, selectedDate);
+                  Navigator.of(context).pop();
+                }
+              },
+              child: Text('Add Task'),
+            ),
+          ],
+        );
+      },
+    );
   }
 
   Future<void> _editTask(int index) async {
     final titleController = TextEditingController(text: _tasks[index]['title']);
     final descriptionController = TextEditingController(text: _tasks[index]['description']);
     DateTime selectedDate = DateTime.parse(_tasks[index]['dueDate']);
+
+    if (!mounted) return;  // Check if the widget is still in the tree
 
     showDialog(
       context: context,
@@ -190,90 +253,28 @@ class _TaskHomePageState extends State<TaskHomePage> with SingleTickerProviderSt
       await _saveTasksToSharedPreferences();
     } else if (_database != null) {
       int id = _tasks[index]['id'];
-      await _database!.update(
-        'tasks',
-        updatedTask,
-        where: 'id = ?',
-        whereArgs: [id],
-      );
+      await _database!.update('tasks', updatedTask, where: 'id = ?', whereArgs: [id]);
     }
     _fetchTasks();
   }
 
-  Future<void> _saveTasksToSharedPreferences() async {
-    SharedPreferences prefs = await SharedPreferences.getInstance();
-    List<String> taskList = _tasks.map((task) => jsonEncode(task)).toList();
-    await prefs.setStringList('tasks', taskList);
-  }
+  Future<void> _toggleTaskCompletion(int index) async {
+    final task = _tasks[index];
+    final updatedTask = {
+      'title': task['title'],
+      'description': task['description'],
+      'dueDate': task['dueDate'],
+      'isCompleted': task['isCompleted'] == 0 ? 1 : 0,
+    };
 
-  Future<void> _loadTasksFromSharedPreferences() async {
-    SharedPreferences prefs = await SharedPreferences.getInstance();
-    List<String>? taskList = prefs.getStringList('tasks');
-    
-    setState(() {
-      _tasks = taskList != null 
-        ? taskList.map((task) => Map<String, dynamic>.from(jsonDecode(task))).toList() 
-        : [];
-    });
-  }
-
-  void _showAddTaskDialog(BuildContext context) {
-    final titleController = TextEditingController();
-    final descriptionController = TextEditingController();
-    DateTime selectedDate = DateTime.now();
-
-    showDialog(
-      context: context,
-      builder: (context) {
-        return AlertDialog(
-          title: Text('Add New Task'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: titleController,
-                decoration: InputDecoration(labelText: 'Task Title'),
-              ),
-              TextField(
-                controller: descriptionController,
-                decoration: InputDecoration(labelText: 'Task Description'),
-              ),
-              ElevatedButton(
-                onPressed: () async {
-                  final pickedDate = await showDatePicker(
-                    context: context,
-                    initialDate: selectedDate,
-                    firstDate: DateTime.now(),
-                    lastDate: DateTime(2100),
-                  );
-                  if (pickedDate != null) {
-                    selectedDate = pickedDate;
-                  }
-                },
-                child: Text('Pick Due Date'),
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: Text('Cancel'),
-            ),
-            TextButton(
-              onPressed: () {
-                final title = titleController.text;
-                final description = descriptionController.text;
-                if (title.isNotEmpty && description.isNotEmpty) {
-                  _addTask(title, description, selectedDate);
-                  Navigator.of(context).pop();
-                }
-              },
-              child: Text('Add Task'),
-            ),
-          ],
-        );
-      },
-    );
+    if (_isWeb) {
+      _tasks[index] = updatedTask;
+      await _saveTasksToSharedPreferences();
+    } else if (_database != null) {
+      int id = task['id'];
+      await _database!.update('tasks', updatedTask, where: 'id = ?', whereArgs: [id]);
+    }
+    _fetchTasks();
   }
 
   @override
@@ -309,8 +310,9 @@ class _TaskHomePageState extends State<TaskHomePage> with SingleTickerProviderSt
 
   Widget _buildTaskList(List<Map<String, dynamic>> tasks) {
     if (tasks.isEmpty) {
-      return Center(child: Text('No tasks available.'));
+      return Center(child: Text('No tasks available'));
     }
+
     return ListView.builder(
       itemCount: tasks.length,
       itemBuilder: (context, index) {
@@ -318,25 +320,14 @@ class _TaskHomePageState extends State<TaskHomePage> with SingleTickerProviderSt
         return ListTile(
           title: Text(task['title']),
           subtitle: Text(task['description']),
-          leading: Checkbox(
+          trailing: Checkbox(
             value: task['isCompleted'] == 1,
             onChanged: (bool? value) {
               _toggleTaskCompletion(index);
             },
           ),
-          trailing: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              IconButton(
-                icon: Icon(Icons.edit),
-                onPressed: () => _editTask(index),
-              ),
-              IconButton(
-                icon: Icon(Icons.delete),
-                onPressed: () => _deleteTask(index),
-              ),
-            ],
-          ),
+          onTap: () => _editTask(index),
+          onLongPress: () => _deleteTask(index),
         );
       },
     );
@@ -345,11 +336,10 @@ class _TaskHomePageState extends State<TaskHomePage> with SingleTickerProviderSt
   List<Map<String, dynamic>> _getTasksForToday() {
     final today = DateTime.now();
     return _tasks.where((task) {
-      final dueDate = DateTime.parse(task['dueDate']);
-      return dueDate.year == today.year &&
-          dueDate.month == today.month &&
-          dueDate.day == today.day &&
-          task['isCompleted'] == 0;
+      final taskDate = DateTime.parse(task['dueDate']);
+      return taskDate.year == today.year &&
+          taskDate.month == today.month &&
+          taskDate.day == today.day;
     }).toList();
   }
 
@@ -358,6 +348,6 @@ class _TaskHomePageState extends State<TaskHomePage> with SingleTickerProviderSt
   }
 
   List<Map<String, dynamic>> _getRepeatedTasks() {
-    return _tasks.where((task) => task['repeatDays'] != null && task['repeatDays'] != '').toList();
+    return _tasks.where((task) => task['isCompleted'] == 0).toList();
   }
 }
