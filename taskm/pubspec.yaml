@@ -33,7 +33,7 @@ dependencies:
   sqflite: ^2.0.0+4
   path: ^1.8.3
   shared_preferences: ^2.0.15
-  flutter_local_notifications: ^9.0.0  # Ensure you're using a compatible version
+  flutter_local_notifications: ^9.9.1  # Ensure you're using a compatible version
   flutter_timezone: ^2.0.0  # Add this line for the timezone package
   intl: ^0.18.0
   timezone: ^0.8.0
