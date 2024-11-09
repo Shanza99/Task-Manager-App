@@ -222,6 +222,14 @@ class _TaskHomePageState extends State<TaskHomePage> with SingleTickerProviderSt
                   });
                 },
               ),
+              IconButton(
+                icon: Icon(Icons.delete),
+                onPressed: () {
+                  setState(() {
+                    _tasks.removeAt(index); // Remove task from list
+                  });
+                },
+              ),
             ],
           ),
         );
@@ -285,24 +293,22 @@ class _TaskHomePageState extends State<TaskHomePage> with SingleTickerProviderSt
           ),
           actions: [
             TextButton(
-              onPressed: () => Navigator.of(context).pop(),
+              onPressed: () {
+                Navigator.pop(context);
+              },
               child: Text('Cancel'),
             ),
-            TextButton(
+            ElevatedButton(
               onPressed: () {
-                final title = titleController.text;
-                final description = descriptionController.text;
-                if (title.isNotEmpty && description.isNotEmpty) {
-                  setState(() {
-                    task['title'] = title;
-                    task['description'] = description;
-                    task['dueDate'] = selectedDate.toIso8601String();
-                    task['repeatDays'] = repeatValue;
-                  });
-                  Navigator.of(context).pop();
-                }
+                setState(() {
+                  task['title'] = titleController.text;
+                  task['description'] = descriptionController.text;
+                  task['dueDate'] = selectedDate.toIso8601String();
+                  task['repeatDays'] = repeatValue;
+                });
+                Navigator.pop(context);
               },
-              child: Text('Save Changes'),
+              child: Text('Save'),
             ),
           ],
         );
@@ -315,13 +321,13 @@ class _TaskHomePageState extends State<TaskHomePage> with SingleTickerProviderSt
     final titleController = TextEditingController();
     final descriptionController = TextEditingController();
     DateTime selectedDate = DateTime.now();
-    String repeatValue = 'daily'; // Default repeat value
+    String repeatValue = 'once';
 
     showDialog(
       context: context,
       builder: (context) {
         return AlertDialog(
-          title: Text('Add New Task'),
+          title: Text('Add Task'),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -366,17 +372,24 @@ class _TaskHomePageState extends State<TaskHomePage> with SingleTickerProviderSt
           ),
           actions: [
             TextButton(
-              onPressed: () => Navigator.of(context).pop(),
+              onPressed: () {
+                Navigator.pop(context);
+              },
               child: Text('Cancel'),
             ),
-            TextButton(
+            ElevatedButton(
               onPressed: () {
-                final title = titleController.text;
-                final description = descriptionController.text;
-                if (title.isNotEmpty && description.isNotEmpty) {
-                  _addTask(title, description, selectedDate, repeatValue);
-                  Navigator.of(context).pop();
-                }
+                setState(() {
+                  _tasks.add({
+                    'id': _tasks.length + 1,
+                    'title': titleController.text,
+                    'description': descriptionController.text,
+                    'dueDate': selectedDate.toIso8601String(),
+                    'isCompleted': false,
+                    'repeatDays': repeatValue,
+                  });
+                });
+                Navigator.pop(context);
               },
               child: Text('Add Task'),
             ),
@@ -384,22 +397,5 @@ class _TaskHomePageState extends State<TaskHomePage> with SingleTickerProviderSt
         );
       },
     );
-  }
-
-  // Function to add task
-  Future<void> _addTask(String title, String description, DateTime dueDate, String repeatDays) async {
-    final newTask = {
-      'title': title,
-      'description': description,
-      'dueDate': dueDate.toIso8601String(),
-      'isCompleted': 0,
-      'repeatDays': repeatDays,
-    };
-    setState(() {
-      _tasks.add(newTask);
-    });
-
-    // Check if the task is due today and show notification
-    _checkIfTaskIsDueToday(newTask);
   }
 }
