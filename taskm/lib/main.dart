@@ -2,6 +2,7 @@ import 'dart:html' as html;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:intl/intl.dart';
 
 void main() {
   runApp(TaskManagerApp());
@@ -45,7 +46,7 @@ class _TaskHomePageState extends State<TaskHomePage> with SingleTickerProviderSt
   // Initialize local notifications for mobile/desktop platforms
   void _initializeNotifications() {
     flutterLocalNotificationsPlugin = FlutterLocalNotificationsPlugin();
-    var initializationSettingsAndroid = const AndroidInitializationSettings('app_icon');
+    var initializationSettingsAndroid = AndroidInitializationSettings('app_icon');
     var initializationSettings = InitializationSettings(
         android: initializationSettingsAndroid);
     flutterLocalNotificationsPlugin!.initialize(initializationSettings);
@@ -71,7 +72,7 @@ class _TaskHomePageState extends State<TaskHomePage> with SingleTickerProviderSt
         'id': 1,
         'title': 'Task 1',
         'description': 'Complete project report',
-        'dueDate': DateTime.now().add(const Duration(seconds: 10)).toIso8601String(),
+        'dueDate': DateTime.now().add(Duration(seconds: 10)).toIso8601String(),
         'isCompleted': false,
         'repeatDays': 'daily', // Repeats every day
       },
@@ -79,7 +80,7 @@ class _TaskHomePageState extends State<TaskHomePage> with SingleTickerProviderSt
         'id': 2,
         'title': 'Task 2',
         'description': 'Call client',
-        'dueDate': DateTime.now().add(const Duration(seconds: 20)).toIso8601String(),
+        'dueDate': DateTime.now().add(Duration(seconds: 20)).toIso8601String(),
         'isCompleted': false,
         'repeatDays': 'weekly', // Repeats every week
       },
@@ -87,7 +88,7 @@ class _TaskHomePageState extends State<TaskHomePage> with SingleTickerProviderSt
         'id': 3,
         'title': 'Task 3',
         'description': 'Submit monthly report',
-        'dueDate': DateTime.now().add(const Duration(seconds: 30)).toIso8601String(),
+        'dueDate': DateTime.now().add(Duration(seconds: 30)).toIso8601String(),
         'isCompleted': false,
         'repeatDays': 'monthly', // Repeats every month
       },
@@ -138,7 +139,7 @@ class _TaskHomePageState extends State<TaskHomePage> with SingleTickerProviderSt
 
   // Function to show desktop notification (Flutter Local Notifications)
   void _showDesktopNotification(String title, String body) {
-    var androidDetails = const AndroidNotificationDetails(
+    var androidDetails = AndroidNotificationDetails(
       'task_channel_id',
       'Task Notifications',
       channelDescription: 'Channel for task notifications',
@@ -170,14 +171,14 @@ class _TaskHomePageState extends State<TaskHomePage> with SingleTickerProviderSt
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Task Manager'),
+        title: Text('Task Manager'),
         bottom: TabBar(
           controller: _tabController,
           tabs: [
-            const Tab(text: 'All Tasks'),
-            const Tab(text: 'Today\'s Tasks'),
-            const Tab(text: 'Completed'),
-            const Tab(text: 'Repeated'), // Repeated tab
+            Tab(text: 'All Tasks'),
+            Tab(text: 'Today\'s Tasks'),
+            Tab(text: 'Completed'),
+            Tab(text: 'Repeated'), // Repeated tab
           ],
         ),
       ),
@@ -192,7 +193,7 @@ class _TaskHomePageState extends State<TaskHomePage> with SingleTickerProviderSt
       ),
       floatingActionButton: FloatingActionButton(
         onPressed: () => _showAddTaskDialog(context),
-        child: const Icon(Icons.add),
+        child: Icon(Icons.add),
       ),
     );
   }
@@ -210,15 +211,47 @@ class _TaskHomePageState extends State<TaskHomePage> with SingleTickerProviderSt
             mainAxisSize: MainAxisSize.min,
             children: [
               IconButton(
-                icon: const Icon(Icons.edit),
+                icon: Icon(Icons.edit),
                 onPressed: () => _showEditTaskDialog(context, task),
               ),
               IconButton(
-                icon: const Icon(Icons.check),
+                icon: Icon(Icons.check),
                 onPressed: () {
                   setState(() {
                     task['isCompleted'] = 1; // Mark as completed
                   });
+                },
+              ),
+              IconButton(
+                icon: Icon(Icons.delete),
+                onPressed: () {
+                  // Show delete confirmation dialog
+                  showDialog(
+                    context: context,
+                    builder: (context) {
+                      return AlertDialog(
+                        title: Text('Delete Task'),
+                        content: Text('Are you sure you want to delete this task?'),
+                        actions: [
+                          TextButton(
+                            onPressed: () {
+                              Navigator.pop(context); // Cancel the deletion
+                            },
+                            child: Text('Cancel'),
+                          ),
+                          TextButton(
+                            onPressed: () {
+                              setState(() {
+                                _tasks.removeAt(index); // Remove task from list
+                              });
+                              Navigator.pop(context); // Close the dialog
+                            },
+                            child: Text('Delete'),
+                          ),
+                        ],
+                      );
+                    },
+                  );
                 },
               ),
             ],
@@ -239,17 +272,17 @@ class _TaskHomePageState extends State<TaskHomePage> with SingleTickerProviderSt
       context: context,
       builder: (context) {
         return AlertDialog(
-          title: const Text('Edit Task'),
+          title: Text('Edit Task'),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               TextField(
                 controller: titleController,
-                decoration: const InputDecoration(labelText: 'Task Title'),
+                decoration: InputDecoration(labelText: 'Task Title'),
               ),
               TextField(
                 controller: descriptionController,
-                decoration: const InputDecoration(labelText: 'Task Description'),
+                decoration: InputDecoration(labelText: 'Task Description'),
               ),
               ElevatedButton(
                 onPressed: () async {
@@ -260,48 +293,49 @@ class _TaskHomePageState extends State<TaskHomePage> with SingleTickerProviderSt
                     lastDate: DateTime(2100),
                   );
                   if (pickedDate != null) {
-                    selectedDate = pickedDate;
+                    setState(() {
+                      selectedDate = pickedDate;
+                    });
                   }
                 },
-                child: const Text('Pick Due Date'),
+                child: Text('Select Due Date'),
               ),
+              Text('Repeat Task:'),
               DropdownButton<String>(
                 value: repeatValue,
-                items: <String>['once', 'daily', 'weekly', 'monthly', 'yearly']
-                    .map((String value) {
+                onChanged: (newValue) {
+                  setState(() {
+                    repeatValue = newValue!;
+                  });
+                },
+                items: ['Once', 'Daily', 'Weekly', 'Monthly']
+                    .map<DropdownMenuItem<String>>((String value) {
                   return DropdownMenuItem<String>(
                     value: value,
                     child: Text(value),
                   );
                 }).toList(),
-                onChanged: (String? newValue) {
-                  setState(() {
-                    repeatValue = newValue!;
-                  });
-                },
               ),
             ],
           ),
           actions: [
             TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: const Text('Cancel'),
+              onPressed: () {
+                Navigator.pop(context);
+              },
+              child: Text('Cancel'),
             ),
             TextButton(
               onPressed: () {
-                final title = titleController.text;
-                final description = descriptionController.text;
-                if (title.isNotEmpty && description.isNotEmpty) {
-                  setState(() {
-                    task['title'] = title;
-                    task['description'] = description;
-                    task['dueDate'] = selectedDate.toIso8601String();
-                    task['repeatDays'] = repeatValue;
-                  });
-                  Navigator.of(context).pop();
-                }
+                setState(() {
+                  task['title'] = titleController.text;
+                  task['description'] = descriptionController.text;
+                  task['dueDate'] = selectedDate.toIso8601String();
+                  task['repeatDays'] = repeatValue;
+                });
+                Navigator.pop(context);
               },
-              child: const Text('Save Changes'),
+              child: Text('Save'),
             ),
           ],
         );
@@ -314,23 +348,23 @@ class _TaskHomePageState extends State<TaskHomePage> with SingleTickerProviderSt
     final titleController = TextEditingController();
     final descriptionController = TextEditingController();
     DateTime selectedDate = DateTime.now();
-    String repeatValue = 'daily'; // Default repeat value
+    String repeatValue = 'Once';
 
     showDialog(
       context: context,
       builder: (context) {
         return AlertDialog(
-          title: const Text('Add New Task'),
+          title: Text('Add New Task'),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               TextField(
                 controller: titleController,
-                decoration: const InputDecoration(labelText: 'Task Title'),
+                decoration: InputDecoration(labelText: 'Task Title'),
               ),
               TextField(
                 controller: descriptionController,
-                decoration: const InputDecoration(labelText: 'Task Description'),
+                decoration: InputDecoration(labelText: 'Task Description'),
               ),
               ElevatedButton(
                 onPressed: () async {
@@ -341,64 +375,57 @@ class _TaskHomePageState extends State<TaskHomePage> with SingleTickerProviderSt
                     lastDate: DateTime(2100),
                   );
                   if (pickedDate != null) {
-                    selectedDate = pickedDate;
+                    setState(() {
+                      selectedDate = pickedDate;
+                    });
                   }
                 },
-                child: const Text('Pick Due Date'),
+                child: Text('Select Due Date'),
               ),
+              Text('Repeat Task:'),
               DropdownButton<String>(
                 value: repeatValue,
-                items: <String>['once', 'daily', 'weekly', 'monthly', 'yearly']
-                    .map((String value) {
+                onChanged: (newValue) {
+                  setState(() {
+                    repeatValue = newValue!;
+                  });
+                },
+                items: ['Once', 'Daily', 'Weekly', 'Monthly']
+                    .map<DropdownMenuItem<String>>((String value) {
                   return DropdownMenuItem<String>(
                     value: value,
                     child: Text(value),
                   );
                 }).toList(),
-                onChanged: (String? newValue) {
-                  setState(() {
-                    repeatValue = newValue!;
-                  });
-                },
               ),
             ],
           ),
           actions: [
             TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: const Text('Cancel'),
+              onPressed: () {
+                Navigator.pop(context);
+              },
+              child: Text('Cancel'),
             ),
             TextButton(
               onPressed: () {
-                final title = titleController.text;
-                final description = descriptionController.text;
-                if (title.isNotEmpty && description.isNotEmpty) {
-                  _addTask(title, description, selectedDate, repeatValue);
-                  Navigator.of(context).pop();
-                }
+                setState(() {
+                  _tasks.add({
+                    'id': _tasks.length + 1,
+                    'title': titleController.text,
+                    'description': descriptionController.text,
+                    'dueDate': selectedDate.toIso8601String(),
+                    'isCompleted': false,
+                    'repeatDays': repeatValue,
+                  });
+                });
+                Navigator.pop(context);
               },
-              child: const Text('Add Task'),
+              child: Text('Add Task'),
             ),
           ],
         );
       },
     );
-  }
-
-  // Function to add task
-  Future<void> _addTask(String title, String description, DateTime dueDate, String repeatDays) async {
-    final newTask = {
-      'title': title,
-      'description': description,
-      'dueDate': dueDate.toIso8601String(),
-      'isCompleted': 0,
-      'repeatDays': repeatDays,
-    };
-    setState(() {
-      _tasks.add(newTask);
-    });
-
-    // Check if the task is due today and show notification
-    _checkIfTaskIsDueToday(newTask);
   }
 }
