@@ -1,5 +1,4 @@
 import 'dart:html' as html;
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:intl/intl.dart';
@@ -112,6 +111,13 @@ class _TaskHomePageState extends State<TaskHomePage> with SingleTickerProviderSt
     }).toList();
   }
 
+  // Helper function to get the week number of the year
+  int getWeekOfYear(DateTime date) {
+    final firstDayOfYear = DateTime(date.year, 1, 1);
+    final daysSinceFirst = date.difference(firstDayOfYear).inDays;
+    return ((daysSinceFirst / 7).floor()) + 1;
+  }
+
   // Function to check if task is due today and show notification
   void _checkIfTaskIsDueToday(Map<String, dynamic> task) {
     DateTime now = DateTime.now();
@@ -200,12 +206,6 @@ class _TaskHomePageState extends State<TaskHomePage> with SingleTickerProviderSt
         date1.day == date2.day;
   }
 
-  // Helper function to check if two dates are the same week
-  bool _isSameWeek(DateTime date1, DateTime date2) {
-    return date1.year == date2.year &&
-        (date1.month == date2.month && (date1.weekOfYear == date2.weekOfYear));
-  }
-
   // Helper function to check if two dates are in the same month
   bool _isSameMonth(DateTime date1, DateTime date2) {
     return date1.year == date2.year && date1.month == date2.month;
@@ -224,20 +224,20 @@ class _TaskHomePageState extends State<TaskHomePage> with SingleTickerProviderSt
         bottom: TabBar(
           controller: _tabController,
           tabs: [
-            Tab(text: 'All Tasks'),
-            Tab(text: 'Today\'s Tasks'),
+            Tab(text: 'Today'),
             Tab(text: 'Completed'),
-            Tab(text: 'Repeated'), // Repeated tab
+            Tab(text: 'Repeated'),
+            Tab(text: 'All'),
           ],
         ),
       ),
       body: TabBarView(
         controller: _tabController,
         children: [
-          _buildTaskList(_tasks),
-          _buildTaskList(_getTasksForToday()),
-          _buildTaskList(_getCompletedTasks()),
-          _buildTaskList(_getRepeatedTasks()), // Show repeated tasks
+          _buildTaskListView(_getTasksForToday()),
+          _buildTaskListView(_getCompletedTasks()),
+          _buildTaskListView(_getRepeatedTasks()),
+          _buildTaskListView(_tasks),
         ],
       ),
       floatingActionButton: FloatingActionButton(
@@ -247,8 +247,8 @@ class _TaskHomePageState extends State<TaskHomePage> with SingleTickerProviderSt
     );
   }
 
-  // Function to build task list
-  Widget _buildTaskList(List<Map<String, dynamic>> tasks) {
+  // Function to build a task list view
+  Widget _buildTaskListView(List<Map<String, dynamic>> tasks) {
     return ListView.builder(
       itemCount: tasks.length,
       itemBuilder: (context, index) {
