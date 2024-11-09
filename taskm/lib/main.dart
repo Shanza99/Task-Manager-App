@@ -1,8 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
-import 'package:timezone/timezone.dart' as tz;
-import 'package:timezone/data/latest.dart' as tz;
+import 'package:flutter_timezone/flutter_timezone.dart';
 import 'package:intl/intl.dart';
+import 'package:sqflite/sqflite.dart';
+import 'package:path/path.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'dart:convert';
+import 'package:flutter/foundation.dart';
 
 void main() {
   runApp(TaskManagerApp());
@@ -23,20 +27,27 @@ class TaskHomePage extends StatefulWidget {
   _TaskHomePageState createState() => _TaskHomePageState();
 }
 
-class _TaskHomePageState extends State<TaskHomePage> {
-  final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
-      FlutterLocalNotificationsPlugin();
+class _TaskHomePageState extends State<TaskHomePage> with SingleTickerProviderStateMixin {
+  final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin = FlutterLocalNotificationsPlugin();
+  Database? _database;
   List<Map<String, dynamic>> _tasks = [];
+  late TabController _tabController;
+  bool _isWeb = false;
+  
+  get tz => null;
 
   @override
   void initState() {
     super.initState();
+    _tabController = TabController(length: 4, vsync: this);
+    _isWeb = kIsWeb;
+    _initDatabase();
     _initializeNotifications();
   }
 
   Future<void> _initializeNotifications() async {
     tz.initializeTimeZones(); // Initialize the timezone data
-    final tz.Location timeZone = await tz.getLocation('America/New_York'); // Example for New York, you can use `tz.local` for local time zone
+    final String timeZone = await tz.getLocation('America/New_York'); // Example for New York, use tz.local for local time zone
     tz.setLocalLocation(timeZone);
 
     final AndroidInitializationSettings initializationSettingsAndroid =
@@ -68,6 +79,86 @@ class _TaskHomePageState extends State<TaskHomePage> {
           UILocalNotificationDateInterpretation.absoluteTime,
       matchDateTimeComponents: DateTimeComponents.time,
     );
+  }
+
+  Future<void> _initDatabase() async {
+    if (_isWeb) {
+      await _loadTasksFromSharedPreferences();
+    } else {
+      String path = join(await getDatabasesPath(), 'tasks.db');
+      _database = await openDatabase(
+        path,
+        version: 1,
+        onCreate: (db, version) {
+          db.execute('''
+            CREATE TABLE tasks (
+              id INTEGER PRIMARY KEY,
+              title TEXT,
+              description TEXT,
+              dueDate TEXT,
+              isCompleted INTEGER
+            )
+          ''');
+        },
+      );
+      _fetchTasks();
+    }
+  }
+
+  Future<void> _fetchTasks() async {
+    if (_isWeb) {
+      await _loadTasksFromSharedPreferences();
+    } else if (_database != null) {
+      final tasks = await _database!.query('tasks');
+      setState(() {
+        _tasks = tasks;
+      });
+    }
+  }
+
+  Future<void> _addTask(String title, String description, DateTime dueDate) async {
+    final newTask = {
+      'title': title,
+      'description': description,
+      'dueDate': dueDate.toIso8601String(),
+      'isCompleted': 0,
+    };
+
+    if (_isWeb) {
+      _tasks.add(newTask);
+      await _saveTasksToSharedPreferences();
+    } else if (_database != null) {
+      await _database!.insert('tasks', newTask);
+    }
+    _scheduleNotification(dueDate); // Schedule notification for the task
+    _fetchTasks();
+  }
+
+  Future<void> _deleteTask(int index) async {
+    if (_isWeb) {
+      _tasks.removeAt(index);
+      await _saveTasksToSharedPreferences();
+    } else if (_database != null) {
+      int id = _tasks[index]['id'];
+      await _database!.delete('tasks', where: 'id = ?', whereArgs: [id]);
+    }
+    _fetchTasks();
+  }
+
+  Future<void> _saveTasksToSharedPreferences() async {
+    SharedPreferences prefs = await SharedPreferences.getInstance();
+    List<String> taskList = _tasks.map((task) => jsonEncode(task)).toList();
+    await prefs.setStringList('tasks', taskList);
+  }
+
+  Future<void> _loadTasksFromSharedPreferences() async {
+    SharedPreferences prefs = await SharedPreferences.getInstance();
+    List<String>? taskList = prefs.getStringList('tasks');
+    setState(() {
+      _tasks = taskList != null
+          ? taskList.map((task) => Map<String, dynamic>.from(jsonDecode(task))).toList()
+          : [];
+    });
   }
 
   void _showAddTaskDialog(BuildContext context) {
@@ -141,7 +232,7 @@ class _TaskHomePageState extends State<TaskHomePage> {
                     selectedTime.hour,
                     selectedTime.minute,
                   );
-                  _scheduleNotification(taskDateTime);
+                  _addTask(title, description, taskDateTime);
                   Navigator.of(context).pop();
                 }
               },
@@ -158,25 +249,68 @@ class _TaskHomePageState extends State<TaskHomePage> {
     return Scaffold(
       appBar: AppBar(
         title: Text('Task Manager'),
+        bottom: TabBar(
+          controller: _tabController,
+          tabs: [
+            Tab(text: 'All Tasks'),
+            Tab(text: 'Today\'s Tasks'),
+            Tab(text: 'Completed'),
+            Tab(text: 'Repeated'),
+          ],
+        ),
       ),
-      body: ListView.builder(
-        itemCount: _tasks.length,
-        itemBuilder: (context, index) {
-          final task = _tasks[index];
-          return ListTile(
-            title: Text(task['title']),
-            subtitle: Text(task['description']),
-            trailing: IconButton(
-              icon: Icon(Icons.delete),
-              onPressed: () {},
-            ),
-          );
-        },
+      body: TabBarView(
+        controller: _tabController,
+        children: [
+          _buildTaskList(_tasks),
+          _buildTaskList(_getTasksForToday()),
+          _buildTaskList(_getCompletedTasks()),
+          _buildTaskList(_getRepeatedTasks()),
+        ],
       ),
       floatingActionButton: FloatingActionButton(
         onPressed: () => _showAddTaskDialog(context),
         child: Icon(Icons.add),
       ),
     );
+  }
+
+  Widget _buildTaskList(List<Map<String, dynamic>> tasks) {
+    if (tasks.isEmpty) {
+      return Center(child: Text('No tasks available.'));
+    }
+    return ListView.builder(
+      itemCount: tasks.length,
+      itemBuilder: (context, index) {
+        final task = tasks[index];
+        return ListTile(
+          title: Text(task['title']),
+          subtitle: Text(task['description']),
+          trailing: IconButton(
+            icon: Icon(Icons.delete),
+            onPressed: () => _deleteTask(index),
+          ),
+        );
+      },
+    );
+  }
+
+  List<Map<String, dynamic>> _getTasksForToday() {
+    final today = DateTime.now();
+    return _tasks.where((task) {
+      final dueDate = DateTime.parse(task['dueDate']);
+      return dueDate.year == today.year &&
+          dueDate.month == today.month &&
+          dueDate.day == today.day &&
+          task['isCompleted'] == 0;
+    }).toList();
+  }
+
+  List<Map<String, dynamic>> _getCompletedTasks() {
+    return _tasks.where((task) => task['isCompleted'] == 1).toList();
+  }
+
+  List<Map<String, dynamic>> _getRepeatedTasks() {
+    return _tasks.where((task) => task['repeatDays'] != null && task['repeatDays'] != '').toList();
   }
 }
