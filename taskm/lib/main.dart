@@ -139,9 +139,10 @@ class _TaskHomePageState extends State<TaskHomePage> with SingleTickerProviderSt
     final descriptionController = TextEditingController(text: _tasks[index]['description']);
     DateTime selectedDate = DateTime.parse(_tasks[index]['dueDate']);
 
+    // Ensure context is correctly passed to the dialog
     showDialog(
-      context: context,
-      builder: (context) {
+      context: context, // Ensure this is directly using context passed to the builder
+      builder: (BuildContext context) {
         return AlertDialog(
           title: Text('Edit Task'),
           content: Column(
