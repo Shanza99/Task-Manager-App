@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:path_provider/path_provider.dart';
 import 'dart:io';
 import 'package:csv/csv.dart';
-import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
 import 'task.dart';
 import 'today_tasks.dart';
@@ -66,7 +66,6 @@ class _TaskManagementAppState extends State<TaskManagementApp> {
     DateTime? _selectedDate;
     bool _isCompleted = false;
     bool _isRepeated = false;
-    List<String> _subtasks = [];
 
     showDialog(
       context: context,
@@ -85,9 +84,10 @@ class _TaskManagementAppState extends State<TaskManagementApp> {
                   controller: _taskDescriptionController,
                   decoration: InputDecoration(labelText: 'Task Description'),
                 ),
-                TextField(
-                  readOnly: true,
-                  decoration: InputDecoration(labelText: 'Due Date'),
+                ListTile(
+                  title: Text(_selectedDate == null
+                      ? 'Select Due Date'
+                      : 'Due Date: ${_selectedDate!.toLocal()}'.split(' ')[0]),
                   onTap: () async {
                     _selectedDate = await showDatePicker(
                       context: context,
@@ -95,6 +95,7 @@ class _TaskManagementAppState extends State<TaskManagementApp> {
                       firstDate: DateTime.now(),
                       lastDate: DateTime(2100),
                     );
+                    setState(() {});
                   },
                 ),
                 CheckboxListTile(
@@ -112,14 +113,6 @@ class _TaskManagementAppState extends State<TaskManagementApp> {
                   onChanged: (bool? value) {
                     setState(() {
                       _isRepeated = value ?? false;
-                    });
-                  },
-                ),
-                TextField(
-                  decoration: InputDecoration(labelText: 'Add Subtask'),
-                  onSubmitted: (subtask) {
-                    setState(() {
-                      _subtasks.add(subtask);
                     });
                   },
                 ),
@@ -143,11 +136,9 @@ class _TaskManagementAppState extends State<TaskManagementApp> {
                     dueDate: _selectedDate!,
                     isCompleted: _isCompleted,
                     isRepeated: _isRepeated,
-                    subtasks: _subtasks,
-                    completedSubtasks: 0,
                   ));
+                  Navigator.of(context).pop();
                 }
-                Navigator.of(context).pop();
               },
             ),
           ],
