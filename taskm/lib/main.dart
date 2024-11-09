@@ -7,6 +7,8 @@ import 'package:pdf/widgets.dart' as pw;
 import 'package:csv/csv.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:flutter_datetime_picker/flutter_datetime_picker.dart'; // Only import this for the date-time picker widget.
+import 'package:flutter_datetime_picker/src/datetime_picker_theme.dart';
 
 void main() {
   runApp(TaskManagerApp());
@@ -41,13 +43,13 @@ class _TaskHomePageState extends State<TaskHomePage> with SingleTickerProviderSt
     _loadDummyTasks();
     _scheduleTodayTaskNotifications();
   }
+Future<void> _initializeNotifications() async {
+  const initializationSettingsAndroid = AndroidInitializationSettings('app_icon');
+  const initializationSettings = InitializationSettings(android: initializationSettingsAndroid);
 
-  Future<void> _initializeNotifications() async {
-    const initializationSettingsAndroid = AndroidInitializationSettings('app_icon');
-    const initializationSettings = InitializationSettings(android: initializationSettingsAndroid);
-
-    await _flutterLocalNotificationsPlugin?.initialize(initializationSettings);
-  }
+  // Initialize notifications without manually requesting permissions
+  await _flutterLocalNotificationsPlugin?.initialize(initializationSettings);
+}
 
   Future<void> _scheduleNotification(Map<String, dynamic> task) async {
     DateTime dueDate = DateTime.parse(task['dueDate']);
@@ -279,8 +281,8 @@ class _TaskHomePageState extends State<TaskHomePage> with SingleTickerProviderSt
   void _showAddTaskDialog(BuildContext context) {
     final titleController = TextEditingController();
     final descriptionController = TextEditingController();
-    final dueDateController = TextEditingController();
     String? selectedRepeat = 'None';
+    DateTime? dueDate;
 
     showDialog(
       context: context,
@@ -292,7 +294,27 @@ class _TaskHomePageState extends State<TaskHomePage> with SingleTickerProviderSt
             children: [
               TextField(controller: titleController, decoration: InputDecoration(labelText: 'Title')),
               TextField(controller: descriptionController, decoration: InputDecoration(labelText: 'Description')),
-              TextField(controller: dueDateController, decoration: InputDecoration(labelText: 'Due Date (YYYY-MM-DD HH:MM)')),
+              GestureDetector(
+                onTap: () {
+                  DatePicker.showDateTimePicker(
+                    context,
+                    showTitleActions: true,
+                    onConfirm: (date) {
+                      setState(() {
+                        dueDate = date;
+                      });
+                    },
+                    currentTime: DateTime.now(),
+                    locale: LocaleType.en,
+                  );
+                },
+                child: AbsorbPointer(
+                  child: TextField(
+                    controller: TextEditingController(text: dueDate == null ? "" : dueDate!.toString()),
+                    decoration: InputDecoration(labelText: 'Due Date'),
+                  ),
+                ),
+              ),
               DropdownButtonFormField<String>(
                 value: selectedRepeat,
                 items: ['None', 'Daily', 'Weekly', 'Monthly']
@@ -312,7 +334,7 @@ class _TaskHomePageState extends State<TaskHomePage> with SingleTickerProviderSt
                     'id': _tasks.length + 1,
                     'title': titleController.text,
                     'description': descriptionController.text,
-                    'dueDate': dueDateController.text,
+                    'dueDate': dueDate?.toIso8601String(),
                     'isCompleted': false,
                     'repeatDays': selectedRepeat,
                   });
@@ -322,7 +344,7 @@ class _TaskHomePageState extends State<TaskHomePage> with SingleTickerProviderSt
                   _scheduleNotification({
                     'id': _tasks.length,
                     'title': titleController.text,
-                    'dueDate': dueDateController.text,
+                    'dueDate': dueDate?.toIso8601String(),
                   });
                 }
               },
@@ -337,8 +359,8 @@ class _TaskHomePageState extends State<TaskHomePage> with SingleTickerProviderSt
   void _showEditTaskDialog(BuildContext context, Map<String, dynamic> task) {
     final titleController = TextEditingController(text: task['title']);
     final descriptionController = TextEditingController(text: task['description']);
-    final dueDateController = TextEditingController(text: task['dueDate']);
     String? selectedRepeat = task['repeatDays'];
+    DateTime? dueDate = DateTime.parse(task['dueDate']);
 
     showDialog(
       context: context,
@@ -350,7 +372,27 @@ class _TaskHomePageState extends State<TaskHomePage> with SingleTickerProviderSt
             children: [
               TextField(controller: titleController, decoration: InputDecoration(labelText: 'Title')),
               TextField(controller: descriptionController, decoration: InputDecoration(labelText: 'Description')),
-              TextField(controller: dueDateController, decoration: InputDecoration(labelText: 'Due Date (YYYY-MM-DD HH:MM)')),
+              GestureDetector(
+                onTap: () {
+                  DatePicker.showDateTimePicker(
+                    context,
+                    showTitleActions: true,
+                    onConfirm: (date) {
+                      setState(() {
+                        dueDate = date;
+                      });
+                    },
+                    currentTime: dueDate,
+                    locale: LocaleType.en,
+                  );
+                },
+                child: AbsorbPointer(
+                  child: TextField(
+                    controller: TextEditingController(text: dueDate?.toString() ?? ""),
+                    decoration: InputDecoration(labelText: 'Due Date'),
+                  ),
+                ),
+              ),
               DropdownButtonFormField<String>(
                 value: selectedRepeat,
                 items: ['None', 'Daily', 'Weekly', 'Monthly']
@@ -368,7 +410,7 @@ class _TaskHomePageState extends State<TaskHomePage> with SingleTickerProviderSt
                 setState(() {
                   task['title'] = titleController.text;
                   task['description'] = descriptionController.text;
-                  task['dueDate'] = dueDateController.text;
+                  task['dueDate'] = dueDate?.toIso8601String();
                   task['repeatDays'] = selectedRepeat;
                 });
                 Navigator.of(context).pop();
