@@ -1,5 +1,4 @@
 import 'dart:html' as html;
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:intl/intl.dart';
@@ -98,7 +97,9 @@ class _TaskHomePageState extends State<TaskHomePage> with SingleTickerProviderSt
   // Filter tasks for repeated tasks
   List<Map<String, dynamic>> _getRepeatedTasks() {
     return _tasks.where((task) {
-      return task['repeatDays'] != null && task['repeatDays'] != '';
+      return task['repeatDays'] != null &&
+          task['repeatDays'] != '' &&
+          task['repeatDays'] != 'once'; // Exclude once tasks
     }).toList();
   }
 
@@ -203,14 +204,104 @@ class _TaskHomePageState extends State<TaskHomePage> with SingleTickerProviderSt
         return ListTile(
           title: Text(task['title']),
           subtitle: Text(task['description']),
-          trailing: IconButton(
-            icon: Icon(Icons.check),
-            onPressed: () {
-              setState(() {
-                task['isCompleted'] = 1; // Mark as completed
-              });
-            },
+          trailing: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              IconButton(
+                icon: Icon(Icons.edit),
+                onPressed: () => _showEditTaskDialog(context, task),
+              ),
+              IconButton(
+                icon: Icon(Icons.check),
+                onPressed: () {
+                  setState(() {
+                    task['isCompleted'] = 1; // Mark as completed
+                  });
+                },
+              ),
+            ],
           ),
+        );
+      },
+    );
+  }
+
+  // Dialog to edit a task
+  void _showEditTaskDialog(BuildContext context, Map<String, dynamic> task) {
+    final titleController = TextEditingController(text: task['title']);
+    final descriptionController = TextEditingController(text: task['description']);
+    DateTime selectedDate = DateTime.parse(task['dueDate']);
+    String repeatValue = task['repeatDays'];
+
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: Text('Edit Task'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: titleController,
+                decoration: InputDecoration(labelText: 'Task Title'),
+              ),
+              TextField(
+                controller: descriptionController,
+                decoration: InputDecoration(labelText: 'Task Description'),
+              ),
+              ElevatedButton(
+                onPressed: () async {
+                  final pickedDate = await showDatePicker(
+                    context: context,
+                    initialDate: selectedDate,
+                    firstDate: DateTime.now(),
+                    lastDate: DateTime(2100),
+                  );
+                  if (pickedDate != null) {
+                    selectedDate = pickedDate;
+                  }
+                },
+                child: Text('Pick Due Date'),
+              ),
+              DropdownButton<String>(
+                value: repeatValue,
+                items: <String>['once', 'daily', 'weekly', 'monthly', 'yearly']
+                    .map((String value) {
+                  return DropdownMenuItem<String>(
+                    value: value,
+                    child: Text(value),
+                  );
+                }).toList(),
+                onChanged: (String? newValue) {
+                  setState(() {
+                    repeatValue = newValue!;
+                  });
+                },
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: Text('Cancel'),
+            ),
+            TextButton(
+              onPressed: () {
+                final title = titleController.text;
+                final description = descriptionController.text;
+                if (title.isNotEmpty && description.isNotEmpty) {
+                  setState(() {
+                    task['title'] = title;
+                    task['description'] = description;
+                    task['dueDate'] = selectedDate.toIso8601String();
+                    task['repeatDays'] = repeatValue;
+                  });
+                  Navigator.of(context).pop();
+                }
+              },
+              child: Text('Save Changes'),
+            ),
+          ],
         );
       },
     );
@@ -255,7 +346,7 @@ class _TaskHomePageState extends State<TaskHomePage> with SingleTickerProviderSt
               ),
               DropdownButton<String>(
                 value: repeatValue,
-                items: <String>['daily', 'weekly', 'monthly']
+                items: <String>['once', 'daily', 'weekly', 'monthly', 'yearly']
                     .map((String value) {
                   return DropdownMenuItem<String>(
                     value: value,
