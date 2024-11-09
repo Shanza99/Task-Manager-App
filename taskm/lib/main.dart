@@ -47,7 +47,7 @@ class _TaskHomePageState extends State<TaskHomePage> with SingleTickerProviderSt
         path,
         version: 1,
         onCreate: (db, version) {
-          db.execute(''' 
+          db.execute('''
             CREATE TABLE tasks (
               id INTEGER PRIMARY KEY,
               title TEXT,
@@ -101,34 +101,18 @@ class _TaskHomePageState extends State<TaskHomePage> with SingleTickerProviderSt
     _fetchTasks();
   }
 
-  Future<void> _saveTasksToSharedPreferences() async {
-    SharedPreferences prefs = await SharedPreferences.getInstance();
-    List<String> taskList = _tasks.map((task) => jsonEncode(task)).toList();
-    await prefs.setStringList('tasks', taskList);
-  }
-
-  Future<void> _loadTasksFromSharedPreferences() async {
-    SharedPreferences prefs = await SharedPreferences.getInstance();
-    List<String>? taskList = prefs.getStringList('tasks');
-    
-    setState(() {
-      _tasks = taskList != null 
-        ? taskList.map((task) => Map<String, dynamic>.from(jsonDecode(task))).toList() 
-        : [];
-    });
-  }
-
-  Future<void> _markTaskAsDone(int index) async {
+  Future<void> _toggleTaskCompletion(int index) async {
     if (_isWeb) {
-      _tasks[index]['isCompleted'] = 1;
+      _tasks[index]['isCompleted'] = _tasks[index]['isCompleted'] == 0 ? 1 : 0;
       await _saveTasksToSharedPreferences();
     } else if (_database != null) {
-      int taskId = _tasks[index]['id'];
+      int id = _tasks[index]['id'];
+      int newStatus = _tasks[index]['isCompleted'] == 0 ? 1 : 0;
       await _database!.update(
         'tasks',
-        {'isCompleted': 1},
+        {'isCompleted': newStatus},
         where: 'id = ?',
-        whereArgs: [taskId],
+        whereArgs: [id],
       );
     }
     _fetchTasks();
@@ -139,10 +123,9 @@ class _TaskHomePageState extends State<TaskHomePage> with SingleTickerProviderSt
     final descriptionController = TextEditingController(text: _tasks[index]['description']);
     DateTime selectedDate = DateTime.parse(_tasks[index]['dueDate']);
 
-    // Ensure context is correctly passed to the dialog
     showDialog(
-      context: context, // Ensure this is directly using context passed to the builder
-      builder: (BuildContext context) {
+      context: context,
+      builder: (context) {
         return AlertDialog(
           title: Text('Edit Task'),
           content: Column(
@@ -199,75 +182,39 @@ class _TaskHomePageState extends State<TaskHomePage> with SingleTickerProviderSt
       'title': title,
       'description': description,
       'dueDate': dueDate.toIso8601String(),
+      'isCompleted': _tasks[index]['isCompleted'],
     };
 
     if (_isWeb) {
-      _tasks[index] = {..._tasks[index], ...updatedTask};
+      _tasks[index] = updatedTask;
       await _saveTasksToSharedPreferences();
     } else if (_database != null) {
-      int taskId = _tasks[index]['id'];
+      int id = _tasks[index]['id'];
       await _database!.update(
         'tasks',
         updatedTask,
         where: 'id = ?',
-        whereArgs: [taskId],
+        whereArgs: [id],
       );
     }
     _fetchTasks();
   }
 
-  Widget _buildTaskList(List<Map<String, dynamic>> tasks) {
-    if (tasks.isEmpty) {
-      return Center(child: Text('No tasks available.'));
-    }
-    return ListView.builder(
-      itemCount: tasks.length,
-      itemBuilder: (context, index) {
-        final task = tasks[index];
-        return ListTile(
-          title: Text(task['title']),
-          subtitle: Text(task['description']),
-          leading: Checkbox(
-            value: task['isCompleted'] == 1,
-            onChanged: (value) {
-              _markTaskAsDone(index);
-            },
-          ),
-          trailing: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              IconButton(
-                icon: Icon(Icons.edit),
-                onPressed: () => _editTask(index),
-              ),
-              IconButton(
-                icon: Icon(Icons.delete),
-                onPressed: () => _deleteTask(index),
-              ),
-            ],
-          ),
-        );
-      },
-    );
+  Future<void> _saveTasksToSharedPreferences() async {
+    SharedPreferences prefs = await SharedPreferences.getInstance();
+    List<String> taskList = _tasks.map((task) => jsonEncode(task)).toList();
+    await prefs.setStringList('tasks', taskList);
   }
 
-  List<Map<String, dynamic>> _getTasksForToday() {
-    final today = DateTime.now();
-    return _tasks.where((task) {
-      final dueDate = DateTime.parse(task['dueDate']);
-      return dueDate.year == today.year &&
-          dueDate.month == today.month &&
-          dueDate.day == today.day &&
-          task['isCompleted'] == 0;
-    }).toList();
-  }
-
-  List<Map<String, dynamic>> _getCompletedTasks() {
-    return _tasks.where((task) => task['isCompleted'] == 1).toList();
-  }
-
-  List<Map<String, dynamic>> _getRepeatedTasks() {
-    return _tasks.where((task) => task['repeatDays'] != null && task['repeatDays'] != '').toList();
+  Future<void> _loadTasksFromSharedPreferences() async {
+    SharedPreferences prefs = await SharedPreferences.getInstance();
+    List<String>? taskList = prefs.getStringList('tasks');
+    
+    setState(() {
+      _tasks = taskList != null 
+        ? taskList.map((task) => Map<String, dynamic>.from(jsonDecode(task))).toList() 
+        : [];
+    });
   }
 
   void _showAddTaskDialog(BuildContext context) {
@@ -333,24 +280,24 @@ class _TaskHomePageState extends State<TaskHomePage> with SingleTickerProviderSt
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text('Task Management'),
+        title: Text('Task Manager'),
         bottom: TabBar(
           controller: _tabController,
           tabs: [
-            Tab(text: 'Today'),
+            Tab(text: 'All Tasks'),
+            Tab(text: 'Today\'s Tasks'),
             Tab(text: 'Completed'),
             Tab(text: 'Repeated'),
-            Tab(text: 'All'),
           ],
         ),
       ),
       body: TabBarView(
         controller: _tabController,
         children: [
+          _buildTaskList(_tasks),
           _buildTaskList(_getTasksForToday()),
           _buildTaskList(_getCompletedTasks()),
           _buildTaskList(_getRepeatedTasks()),
-          _buildTaskList(_tasks),
         ],
       ),
       floatingActionButton: FloatingActionButton(
@@ -358,5 +305,59 @@ class _TaskHomePageState extends State<TaskHomePage> with SingleTickerProviderSt
         child: Icon(Icons.add),
       ),
     );
+  }
+
+  Widget _buildTaskList(List<Map<String, dynamic>> tasks) {
+    if (tasks.isEmpty) {
+      return Center(child: Text('No tasks available.'));
+    }
+    return ListView.builder(
+      itemCount: tasks.length,
+      itemBuilder: (context, index) {
+        final task = tasks[index];
+        return ListTile(
+          title: Text(task['title']),
+          subtitle: Text(task['description']),
+          leading: Checkbox(
+            value: task['isCompleted'] == 1,
+            onChanged: (bool? value) {
+              _toggleTaskCompletion(index);
+            },
+          ),
+          trailing: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              IconButton(
+                icon: Icon(Icons.edit),
+                onPressed: () => _editTask(index),
+              ),
+              IconButton(
+                icon: Icon(Icons.delete),
+                onPressed: () => _deleteTask(index),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  List<Map<String, dynamic>> _getTasksForToday() {
+    final today = DateTime.now();
+    return _tasks.where((task) {
+      final dueDate = DateTime.parse(task['dueDate']);
+      return dueDate.year == today.year &&
+          dueDate.month == today.month &&
+          dueDate.day == today.day &&
+          task['isCompleted'] == 0;
+    }).toList();
+  }
+
+  List<Map<String, dynamic>> _getCompletedTasks() {
+    return _tasks.where((task) => task['isCompleted'] == 1).toList();
+  }
+
+  List<Map<String, dynamic>> _getRepeatedTasks() {
+    return _tasks.where((task) => task['repeatDays'] != null && task['repeatDays'] != '').toList();
   }
 }
