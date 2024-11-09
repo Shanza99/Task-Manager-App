@@ -185,13 +185,106 @@ class _TaskHomePageState extends State<TaskHomePage> with SingleTickerProviderSt
         return ListTile(
           title: Text(task['title']),
           subtitle: Text(task['description']),
-          trailing: IconButton(
-            icon: Icon(Icons.delete),
-            onPressed: () => _deleteTask(index),
+          trailing: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Edit button (pencil icon)
+              IconButton(
+                icon: Icon(Icons.edit),
+                onPressed: () => _editTaskDialog(context, task, index),
+              ),
+              // Mark as done button (checkmark icon)
+              IconButton(
+                icon: Icon(Icons.check),
+                onPressed: () => _markTaskAsDone(index),
+              ),
+            ],
           ),
         );
       },
     );
+  }
+
+  // Function to mark a task as done
+  void _markTaskAsDone(int index) {
+    setState(() {
+      _tasks[index]['isCompleted'] = 1; // Mark the task as completed
+    });
+  }
+
+  // Function to show edit task dialog
+  void _editTaskDialog(BuildContext context, Map<String, dynamic> task, int index) {
+    final titleController = TextEditingController(text: task['title']);
+    final descriptionController = TextEditingController(text: task['description']);
+    DateTime selectedDate = DateTime.parse(task['dueDate']);
+
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: Text('Edit Task'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: titleController,
+                decoration: InputDecoration(labelText: 'Task Title'),
+              ),
+              TextField(
+                controller: descriptionController,
+                decoration: InputDecoration(labelText: 'Task Description'),
+              ),
+              ElevatedButton(
+                onPressed: () async {
+                  final pickedDate = await showDatePicker(
+                    context: context,
+                    initialDate: selectedDate,
+                    firstDate: DateTime.now(),
+                    lastDate: DateTime(2100),
+                  );
+                  if (pickedDate != null) {
+                    selectedDate = pickedDate;
+                  }
+                },
+                child: Text('Pick Due Date'),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: Text('Cancel'),
+            ),
+            TextButton(
+              onPressed: () {
+                final title = titleController.text;
+                final description = descriptionController.text;
+                if (title.isNotEmpty && description.isNotEmpty) {
+                  _editTask(index, title, description, selectedDate);
+                  Navigator.of(context).pop();
+                }
+              },
+              child: Text('Save Changes'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  // Function to edit task
+  void _editTask(int index, String title, String description, DateTime dueDate) {
+    setState(() {
+      _tasks[index] = {
+        'title': title,
+        'description': description,
+        'dueDate': dueDate.toIso8601String(),
+        'isCompleted': _tasks[index]['isCompleted'],
+      };
+    });
+
+    // Check if the task is due today and show notification
+    _checkIfTaskIsDueToday(_tasks[index]);
   }
 
   // Function to add task (Dialog)
