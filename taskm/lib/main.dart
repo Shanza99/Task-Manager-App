@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
-import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'dart:convert';
+import 'package:flutter/foundation.dart';  // Import this for kIsWeb
 import 'dart:io' show Platform;
 
 void main() {
@@ -14,8 +15,6 @@ class TaskManagerApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
-      theme: ThemeData.light(),
-      darkTheme: ThemeData.dark(),
       home: TaskHomePage(),
     );
   }
@@ -30,59 +29,37 @@ class _TaskHomePageState extends State<TaskHomePage> with SingleTickerProviderSt
   Database? _database;
   List<Map<String, dynamic>> _tasks = [];
   late TabController _tabController;
-  final FlutterLocalNotificationsPlugin _notificationsPlugin = FlutterLocalNotificationsPlugin();
   bool _isWeb = false;
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 4, vsync: this);
-    _isWeb = !Platform.isAndroid && !Platform.isIOS;
+    _isWeb = kIsWeb;
     _initDatabase();
-    _initNotifications();
-  }
-
-  @override
-  void dispose() {
-    _tabController.dispose();
-    super.dispose();
   }
 
   Future<void> _initDatabase() async {
     if (_isWeb) {
-      print("Using shared_preferences for web storage");
       _fetchTasksFromPrefs();
     } else {
-      try {
-        String path = join(await getDatabasesPath(), 'tasks.db');
-        _database = await openDatabase(
-          path,
-          version: 1,
-          onCreate: (db, version) {
-            db.execute('''
-              CREATE TABLE IF NOT EXISTS tasks (
-                id INTEGER PRIMARY KEY,
-                title TEXT,
-                description TEXT,
-                dueDate TEXT,
-                repeatDays TEXT,
-                isCompleted INTEGER
-              )
-            ''');
-          },
-        );
-        print("Database initialized at: $path");
-        _fetchTasks();
-      } catch (e) {
-        print("Database initialization error: $e");
-      }
+      String path = join(await getDatabasesPath(), 'tasks.db');
+      _database = await openDatabase(
+        path,
+        version: 1,
+        onCreate: (db, version) {
+          return db.execute(
+            'CREATE TABLE tasks (id INTEGER PRIMARY KEY, title TEXT, description TEXT, dueDate TEXT, isCompleted INTEGER)',
+          );
+        },
+      );
+      _fetchTasks();
     }
   }
 
   Future<void> _fetchTasks() async {
     if (_database != null) {
       final tasks = await _database!.query('tasks');
-      print("Fetched tasks: $tasks");
       setState(() {
         _tasks = tasks;
       });
@@ -92,7 +69,7 @@ class _TaskHomePageState extends State<TaskHomePage> with SingleTickerProviderSt
   Future<void> _fetchTasksFromPrefs() async {
     final prefs = await SharedPreferences.getInstance();
     final tasksString = prefs.getString('tasks') ?? '[]';
-    final tasks = List<Map<String, dynamic>>.from(await jsonDecode(tasksString));
+    final tasks = List<Map<String, dynamic>>.from(jsonDecode(tasksString));
     setState(() {
       _tasks = tasks;
     });
@@ -103,7 +80,6 @@ class _TaskHomePageState extends State<TaskHomePage> with SingleTickerProviderSt
       'title': title,
       'description': description,
       'dueDate': dueDate.toIso8601String(),
-      'repeatDays': '',
       'isCompleted': 0,
     };
     if (_isWeb) {
@@ -117,7 +93,7 @@ class _TaskHomePageState extends State<TaskHomePage> with SingleTickerProviderSt
   Future<void> _addTaskToPrefs(Map<String, dynamic> task) async {
     final prefs = await SharedPreferences.getInstance();
     final tasksString = prefs.getString('tasks') ?? '[]';
-    final tasks = List<Map<String, dynamic>>.from(await jsonDecode(tasksString));
+    final tasks = List<Map<String, dynamic>>.from(jsonDecode(tasksString));
     tasks.add(task);
     await prefs.setString('tasks', jsonEncode(tasks));
     _fetchTasksFromPrefs();
@@ -135,16 +111,49 @@ class _TaskHomePageState extends State<TaskHomePage> with SingleTickerProviderSt
   Future<void> _deleteTaskFromPrefs(int id) async {
     final prefs = await SharedPreferences.getInstance();
     final tasksString = prefs.getString('tasks') ?? '[]';
-    final tasks = List<Map<String, dynamic>>.from(await jsonDecode(tasksString));
+    final tasks = List<Map<String, dynamic>>.from(jsonDecode(tasksString));
     tasks.removeWhere((task) => task['id'] == id);
     await prefs.setString('tasks', jsonEncode(tasks));
     _fetchTasksFromPrefs();
   }
 
-  Future<void> _initNotifications() async {
-    final android = AndroidInitializationSettings('@mipmap/ic_launcher');
-    final settings = InitializationSettings(android: android);
-    await _notificationsPlugin.initialize(settings);
+  // Placeholder for getting tasks for today
+  List<Map<String, dynamic>> _getTasksForToday() {
+    return _tasks.where((task) {
+      final dueDate = DateTime.parse(task['dueDate']);
+      return dueDate.day == DateTime.now().day &&
+          dueDate.month == DateTime.now().month &&
+          dueDate.year == DateTime.now().year;
+    }).toList();
+  }
+
+  // Placeholder for getting completed tasks
+  List<Map<String, dynamic>> _getCompletedTasks() {
+    return _tasks.where((task) => task['isCompleted'] == 1).toList();
+  }
+
+  // Placeholder for getting repeated tasks
+  List<Map<String, dynamic>> _getRepeatedTasks() {
+    // Define your repeated task logic here, if necessary
+    return [];
+  }
+
+  // Updated buildTaskList function
+  Widget _buildTaskList(List<Map<String, dynamic>> tasks) {
+    return ListView.builder(
+      itemCount: tasks.length,
+      itemBuilder: (context, index) {
+        final task = tasks[index];
+        return ListTile(
+          title: Text(task['title']),
+          subtitle: Text(task['description']),
+          trailing: IconButton(
+            icon: Icon(Icons.delete),
+            onPressed: () => _deleteTask(task['id']),
+          ),
+        );
+      },
+    );
   }
 
   @override
@@ -171,13 +180,6 @@ class _TaskHomePageState extends State<TaskHomePage> with SingleTickerProviderSt
           _buildTaskList(_getRepeatedTasks()),
         ],
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () => _showAddTaskDialog(context),
-        child: Icon(Icons.add),
-      ),
     );
   }
-
-  // Remaining code unchanged...
-
 }
