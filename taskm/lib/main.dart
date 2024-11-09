@@ -29,6 +29,7 @@ class _TaskHomePageState extends State<TaskHomePage> with SingleTickerProviderSt
   List<Map<String, dynamic>> _tasks = [];
   late TabController _tabController;
   bool _isWeb = false;
+  final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
 
   @override
   void initState() {
@@ -118,16 +119,15 @@ class _TaskHomePageState extends State<TaskHomePage> with SingleTickerProviderSt
     });
   }
 
-  void _showAddTaskDialog(BuildContext context) {
+  void _showAddTaskDialog() {
     final titleController = TextEditingController();
     final descriptionController = TextEditingController();
     DateTime selectedDate = DateTime.now();
 
-    if (!mounted) return;  // Check if the widget is still in the tree
+    if (!_scaffoldKey.currentState!.mounted) return;  // Check if the widget is still mounted
 
-    showDialog(
-      context: context,
-      builder: (context) {
+    _scaffoldKey.currentState!.showBottomSheet(
+      (context) {
         return AlertDialog(
           title: Text('Add New Task'),
           content: Column(
@@ -184,11 +184,10 @@ class _TaskHomePageState extends State<TaskHomePage> with SingleTickerProviderSt
     final descriptionController = TextEditingController(text: _tasks[index]['description']);
     DateTime selectedDate = DateTime.parse(_tasks[index]['dueDate']);
 
-    if (!mounted) return;  // Check if the widget is still in the tree
+    if (!_scaffoldKey.currentState!.mounted) return;
 
-    showDialog(
-      context: context,
-      builder: (context) {
+    _scaffoldKey.currentState!.showBottomSheet(
+      (context) {
         return AlertDialog(
           title: Text('Edit Task'),
           content: Column(
@@ -280,6 +279,7 @@ class _TaskHomePageState extends State<TaskHomePage> with SingleTickerProviderSt
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      key: _scaffoldKey,
       appBar: AppBar(
         title: Text('Task Manager'),
         bottom: TabBar(
@@ -302,7 +302,7 @@ class _TaskHomePageState extends State<TaskHomePage> with SingleTickerProviderSt
         ],
       ),
       floatingActionButton: FloatingActionButton(
-        onPressed: () => _showAddTaskDialog(context),
+        onPressed: _showAddTaskDialog,
         child: Icon(Icons.add),
       ),
     );
@@ -312,7 +312,6 @@ class _TaskHomePageState extends State<TaskHomePage> with SingleTickerProviderSt
     if (tasks.isEmpty) {
       return Center(child: Text('No tasks available.'));
     }
-
     return ListView.builder(
       itemCount: tasks.length,
       itemBuilder: (context, index) {
