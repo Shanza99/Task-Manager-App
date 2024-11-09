@@ -6,7 +6,7 @@ import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:csv/csv.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';  // Import the plugin
 
 void main() {
   runApp(TaskManagerApp());
@@ -30,13 +30,13 @@ class TaskHomePage extends StatefulWidget {
 class _TaskHomePageState extends State<TaskHomePage> with SingleTickerProviderStateMixin {
   List<Map<String, dynamic>> _tasks = [];
   late TabController _tabController;
-  FlutterLocalNotificationsPlugin? _flutterLocalNotificationsPlugin;
+  FlutterLocalNotificationsPlugin? _flutterLocalNotificationsPlugin;  // Declare the plugin
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 4, vsync: this);
-    _flutterLocalNotificationsPlugin = FlutterLocalNotificationsPlugin();
+    _flutterLocalNotificationsPlugin = FlutterLocalNotificationsPlugin();  // Initialize the plugin
     _initializeNotifications();
     _loadDummyTasks();
   }
@@ -268,172 +268,110 @@ class _TaskHomePageState extends State<TaskHomePage> with SingleTickerProviderSt
     );
   }
 
-  // Dummy method to get today's tasks
-  List<Map<String, dynamic>> _getTasksForToday() {
-    return _tasks.where((task) {
-      DateTime dueDate = DateTime.parse(task['dueDate']);
-      return dueDate.day == DateTime.now().day &&
-          dueDate.month == DateTime.now().month &&
-          dueDate.year == DateTime.now().year;
-    }).toList();
-  }
+// Dummy method to get today's tasks
+List<Map<String, dynamic>> _getTasksForToday() {
+  return _tasks.where((task) {
+    DateTime dueDate = DateTime.parse(task['dueDate']);
+    DateTime now = DateTime.now();
+    
+    // Compare only the date part (ignoring the time)
+    return dueDate.year == now.year &&
+           dueDate.month == now.month &&
+           dueDate.day == now.day;
+  }).toList();
+}
+
 
   // Dummy method to get completed tasks
   List<Map<String, dynamic>> _getCompletedTasks() {
-    return _tasks.where((task) => task['isCompleted'] == true).toList();
+    return _tasks.where((task) => task['isCompleted']).toList();
   }
 
   // Dummy method to get repeated tasks
   List<Map<String, dynamic>> _getRepeatedTasks() {
-    return _tasks.where((task) => task['repeatDays'] != 'none').toList();
+    return _tasks.where((task) => task['repeatDays'] != null).toList();
   }
 
-  // Show add task dialog with date and time selection
+  // Show dialog to add task
   void _showAddTaskDialog(BuildContext context) {
-    final taskController = TextEditingController();
-    final descriptionController = TextEditingController();
-    DateTime? selectedDate = DateTime.now();
-    TimeOfDay selectedTime = TimeOfDay.now();
-
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: Text('Add Task'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: taskController,
-              decoration: InputDecoration(labelText: 'Task Title'),
-            ),
-            TextField(
-              controller: descriptionController,
-              decoration: InputDecoration(labelText: 'Task Description'),
+      builder: (context) {
+        return AlertDialog(
+          title: Text('Add Task'),
+          content: Column(
+            children: [
+              TextField(
+                decoration: InputDecoration(labelText: 'Title'),
+              ),
+              TextField(
+                decoration: InputDecoration(labelText: 'Description'),
+              ),
+              TextField(
+                decoration: InputDecoration(labelText: 'Due Date'),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+              },
+              child: Text('Cancel'),
             ),
             TextButton(
-              onPressed: () async {
-                selectedDate = await showDatePicker(
-                  context: context,
-                  initialDate: selectedDate!,
-                  firstDate: DateTime(2020),
-                  lastDate: DateTime(2101),
-                );
+              onPressed: () {
+                // Add task logic here
+                Navigator.of(context).pop();
               },
-              child: Text("Select Due Date: ${selectedDate?.toLocal()}"),
-            ),
-            TextButton(
-              onPressed: () async {
-                selectedTime = await showTimePicker(
-                  context: context,
-                  initialTime: selectedTime,
-                ) ?? selectedTime;
-              },
-              child: Text("Select Time: ${selectedTime.format(context)}"),
+              child: Text('Add'),
             ),
           ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () {
-              Navigator.pop(context);
-            },
-            child: Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () {
-              if (selectedDate != null) {
-                setState(() {
-                  _tasks.add({
-                    'id': _tasks.length + 1,
-                    'title': taskController.text,
-                    'description': descriptionController.text,
-                    'dueDate': DateTime(selectedDate!.year, selectedDate!.month, selectedDate!.day, selectedTime.hour, selectedTime.minute).toIso8601String(),
-                    'isCompleted': false,
-                    'repeatDays': 'daily',
-                  });
-                  _scheduleNotification(_tasks.last); // Schedule notification
-                });
-              }
-              Navigator.pop(context);
-            },
-            child: Text('Save'),
-          ),
-        ],
-      ),
+        );
+      },
     );
   }
 
-  // Show edit task dialog (no changes)
+  // Show dialog to edit task
   void _showEditTaskDialog(BuildContext context, Map<String, dynamic> task) {
-    final taskController = TextEditingController(text: task['title']);
-    final descriptionController = TextEditingController(text: task['description']);
-    DateTime? selectedDate = DateTime.parse(task['dueDate']);
-    TimeOfDay selectedTime = TimeOfDay.fromDateTime(DateTime.parse(task['dueDate']));
-
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: Text('Edit Task'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: taskController,
-              decoration: InputDecoration(labelText: 'Task Title'),
-              onChanged: (value) {
-                task['title'] = value;
+      builder: (context) {
+        return AlertDialog(
+          title: Text('Edit Task'),
+          content: Column(
+            children: [
+              TextField(
+                controller: TextEditingController(text: task['title']),
+                decoration: InputDecoration(labelText: 'Title'),
+              ),
+              TextField(
+                controller: TextEditingController(text: task['description']),
+                decoration: InputDecoration(labelText: 'Description'),
+              ),
+              TextField(
+                controller: TextEditingController(text: task['dueDate']),
+                decoration: InputDecoration(labelText: 'Due Date'),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.of(context).pop();
               },
-            ),
-            TextField(
-              controller: descriptionController,
-              decoration: InputDecoration(labelText: 'Task Description'),
-              onChanged: (value) {
-                task['description'] = value;
-              },
+              child: Text('Cancel'),
             ),
             TextButton(
-              onPressed: () async {
-                selectedDate = await showDatePicker(
-                  context: context,
-                  initialDate: selectedDate!,
-                  firstDate: DateTime(2020),
-                  lastDate: DateTime(2101),
-                );
+              onPressed: () {
+                // Edit task logic here
+                Navigator.of(context).pop();
               },
-              child: Text("Select Due Date: ${selectedDate?.toLocal()}"),
-            ),
-            TextButton(
-              onPressed: () async {
-                selectedTime = await showTimePicker(
-                  context: context,
-                  initialTime: selectedTime,
-                ) ?? selectedTime;
-              },
-              child: Text("Select Time: ${selectedTime.format(context)}"),
+              child: Text('Save'),
             ),
           ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () {
-              Navigator.pop(context);
-            },
-            child: Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () {
-              setState(() {
-                task['dueDate'] = DateTime(selectedDate!.year, selectedDate!.month, selectedDate!.day, selectedTime.hour, selectedTime.minute).toIso8601String();
-              });
-              Navigator.pop(context);
-            },
-            child: Text('Save'),
-          ),
-        ],
-      ),
+        );
+      },
     );
   }
 }
-
-
-
