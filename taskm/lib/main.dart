@@ -1,15 +1,8 @@
-import 'package:flutter/material.dart';
-import 'package:sqflite/sqflite.dart';
-import 'package:path/path.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-import 'dart:convert';
+import 'dart:html' as html;
 import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:intl/intl.dart';
-import 'package:flutter_timezone/flutter_timezone.dart';
-import 'dart:html' as html;
-
-import 'package:timezone/timezone.dart';
 
 void main() {
   runApp(TaskManagerApp());
@@ -31,119 +24,298 @@ class TaskHomePage extends StatefulWidget {
 }
 
 class _TaskHomePageState extends State<TaskHomePage> with SingleTickerProviderStateMixin {
-  Database? _database;
+  FlutterLocalNotificationsPlugin? flutterLocalNotificationsPlugin;
   List<Map<String, dynamic>> _tasks = [];
   late TabController _tabController;
-  bool _isWeb = false;
-  late FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin;
+  bool isWeb = false;
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 4, vsync: this);
-    _isWeb = kIsWeb;
-    flutterLocalNotificationsPlugin = FlutterLocalNotificationsPlugin();
-    _initDatabase();
-    _initializeNotifications();
-  }
+    isWeb = (defaultTargetPlatform == TargetPlatform.linux ||
+        defaultTargetPlatform == TargetPlatform.windows ||
+        defaultTargetPlatform == TargetPlatform.macOS);
 
-  Future<void> _initializeNotifications() async {
-    const AndroidInitializationSettings initializationSettingsAndroid =
-        AndroidInitializationSettings('app_icon');
-    final InitializationSettings initializationSettings =
-        InitializationSettings(android: initializationSettingsAndroid);
-
-    await flutterLocalNotificationsPlugin.initialize(initializationSettings);
-  }
-
-  Future<void> _initDatabase() async {
-    if (_isWeb) {
-      await _loadTasksFromSharedPreferences();
-    } else {
-      String path = join(await getDatabasesPath(), 'tasks.db');
-      _database = await openDatabase(
-        path,
-        version: 1,
-        onCreate: (db, version) {
-          db.execute('''
-            CREATE TABLE tasks (
-              id INTEGER PRIMARY KEY,
-              title TEXT,
-              description TEXT,
-              dueDate TEXT,
-              isCompleted INTEGER,
-              repeatDays TEXT
-            )
-          ''');
-        },
-      );
-      _fetchTasks();
+    if (!isWeb) {
+      _initializeNotifications(); // Initialize notifications for mobile/desktop
     }
+    _loadDummyTasks(); // Load dummy tasks for testing
   }
 
-  Future<void> _fetchTasks() async {
-    if (_isWeb) {
-      await _loadTasksFromSharedPreferences();
-    } else if (_database != null) {
-      final tasks = await _database!.query('tasks');
-      setState(() {
-        _tasks = tasks;
+  // Initialize local notifications for mobile/desktop platforms
+  void _initializeNotifications() {
+    flutterLocalNotificationsPlugin = FlutterLocalNotificationsPlugin();
+    var initializationSettingsAndroid = AndroidInitializationSettings('app_icon');
+    var initializationSettings = InitializationSettings(
+        android: initializationSettingsAndroid);
+    flutterLocalNotificationsPlugin!.initialize(initializationSettings);
+  }
+
+  // Function for triggering web notifications
+  void showWebNotification(String title, String body) {
+    if (html.Notification.permission == "granted") {
+      html.Notification(title, body: body);
+    } else if (html.Notification.permission != "denied") {
+      html.Notification.requestPermission().then((permission) {
+        if (permission == "granted") {
+          html.Notification(title, body: body);
+        }
       });
     }
   }
 
-  Future<void> _addTask(String title, String description, DateTime dueDate, String repeatDays) async {
-    final newTask = {
-      'title': title,
-      'description': description,
-      'dueDate': dueDate.toIso8601String(),
-      'isCompleted': 0,
-      'repeatDays': repeatDays,
-    };
+  // Dummy function to load tasks (for testing purposes)
+  void _loadDummyTasks() {
+    _tasks = [
+      {
+        'id': 1,
+        'title': 'Task 1',
+        'description': 'Complete project report',
+        'dueDate': DateTime.now().add(Duration(seconds: 10)).toIso8601String(),
+        'isCompleted': false,
+        'repeatDays': 'daily', // Repeats every day
+      },
+      {
+        'id': 2,
+        'title': 'Task 2',
+        'description': 'Call client',
+        'dueDate': DateTime.now().add(Duration(seconds: 20)).toIso8601String(),
+        'isCompleted': false,
+        'repeatDays': 'weekly', // Repeats every week
+      },
+      {
+        'id': 3,
+        'title': 'Task 3',
+        'description': 'Submit monthly report',
+        'dueDate': DateTime.now().add(Duration(seconds: 30)).toIso8601String(),
+        'isCompleted': false,
+        'repeatDays': 'monthly', // Repeats every month
+      },
+    ];
+  }
 
-    if (_isWeb) {
-      _tasks.add(newTask);
-      await _saveTasksToSharedPreferences();
-    } else if (_database != null) {
-      await _database!.insert('tasks', newTask);
+  // Filter tasks for repeated tasks
+  List<Map<String, dynamic>> _getRepeatedTasks() {
+    return _tasks.where((task) {
+      return task['repeatDays'] != null &&
+          task['repeatDays'] != '' &&
+          task['repeatDays'] != 'once'; // Exclude once tasks
+    }).toList();
+  }
+
+  // Function to check if task is due today and show notification
+  void _checkIfTaskIsDueToday(Map<String, dynamic> task) {
+    DateTime now = DateTime.now();
+    DateTime taskDueDate = DateTime.parse(task['dueDate']);
+
+    // Compare only the year, month, and day (ignore time portion)
+    if (taskDueDate.year == now.year &&
+        taskDueDate.month == now.month &&
+        taskDueDate.day == now.day) {
+      if (task['repeatDays'] != null) {
+        // If the task repeats, add logic to show repeated task notification
+        if (task['repeatDays'] == 'daily') {
+          _showNotificationForRepeatedTask(task);
+        }
+      }
     }
-    _fetchTasks();
-    _scheduleNotification(newTask); // Schedule notification for the new task
   }
 
-  Future<void> _deleteTask(int index) async {
-    if (_isWeb) {
-      _tasks.removeAt(index);
-      await _saveTasksToSharedPreferences();
-    } else if (_database != null) {
-      int id = _tasks[index]['id'];
-      await _database!.delete('tasks', where: 'id = ?', whereArgs: [id]);
+  // Function to show notification for repeated tasks
+  void _showNotificationForRepeatedTask(Map<String, dynamic> task) {
+    if (isWeb) {
+      showWebNotification(
+        "Repeated Task: ${task['title']}",
+        "Your task is due today: ${task['description']}",
+      );
+    } else {
+      _showDesktopNotification(
+        "Repeated Task: ${task['title']}",
+        "Your task is due today: ${task['description']}",
+      );
     }
-    _fetchTasks();
   }
 
-  Future<void> _saveTasksToSharedPreferences() async {
-    SharedPreferences prefs = await SharedPreferences.getInstance();
-    List<String> taskList = _tasks.map((task) => jsonEncode(task)).toList();
-    await prefs.setStringList('tasks', taskList);
+  // Function to show desktop notification (Flutter Local Notifications)
+  void _showDesktopNotification(String title, String body) {
+    var androidDetails = AndroidNotificationDetails(
+      'task_channel_id',
+      'Task Notifications',
+      channelDescription: 'Channel for task notifications',
+      importance: Importance.high,
+      priority: Priority.high,
+    );
+    var generalNotificationDetails = NotificationDetails(android: androidDetails);
+    flutterLocalNotificationsPlugin!
+        .show(0, title, body, generalNotificationDetails);
   }
 
-  Future<void> _loadTasksFromSharedPreferences() async {
-    SharedPreferences prefs = await SharedPreferences.getInstance();
-    List<String>? taskList = prefs.getStringList('tasks');
-    
-    setState(() {
-      _tasks = taskList != null 
-        ? taskList.map((task) => Map<String, dynamic>.from(jsonDecode(task))).toList() 
-        : [];
-    });
+  // Fetch tasks for different tabs
+  List<Map<String, dynamic>> _getTasksForToday() {
+    final today = DateTime.now();
+    return _tasks.where((task) {
+      final dueDate = DateTime.parse(task['dueDate']);
+      return dueDate.year == today.year &&
+          dueDate.month == today.month &&
+          dueDate.day == today.day &&
+          task['isCompleted'] == 0;
+    }).toList();
   }
 
+  List<Map<String, dynamic>> _getCompletedTasks() {
+    return _tasks.where((task) => task['isCompleted'] == 1).toList();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: Text('Task Manager'),
+        bottom: TabBar(
+          controller: _tabController,
+          tabs: [
+            Tab(text: 'All Tasks'),
+            Tab(text: 'Today\'s Tasks'),
+            Tab(text: 'Completed'),
+            Tab(text: 'Repeated'), // Repeated tab
+          ],
+        ),
+      ),
+      body: TabBarView(
+        controller: _tabController,
+        children: [
+          _buildTaskList(_tasks),
+          _buildTaskList(_getTasksForToday()),
+          _buildTaskList(_getCompletedTasks()),
+          _buildTaskList(_getRepeatedTasks()), // Show repeated tasks
+        ],
+      ),
+      floatingActionButton: FloatingActionButton(
+        onPressed: () => _showAddTaskDialog(context),
+        child: Icon(Icons.add),
+      ),
+    );
+  }
+
+  // Function to build task list
+  Widget _buildTaskList(List<Map<String, dynamic>> tasks) {
+    return ListView.builder(
+      itemCount: tasks.length,
+      itemBuilder: (context, index) {
+        var task = tasks[index];
+        return ListTile(
+          title: Text(task['title']),
+          subtitle: Text(task['description']),
+          trailing: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              IconButton(
+                icon: Icon(Icons.edit),
+                onPressed: () => _showEditTaskDialog(context, task),
+              ),
+              IconButton(
+                icon: Icon(Icons.check),
+                onPressed: () {
+                  setState(() {
+                    task['isCompleted'] = 1; // Mark as completed
+                  });
+                },
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  // Dialog to edit a task
+  void _showEditTaskDialog(BuildContext context, Map<String, dynamic> task) {
+    final titleController = TextEditingController(text: task['title']);
+    final descriptionController = TextEditingController(text: task['description']);
+    DateTime selectedDate = DateTime.parse(task['dueDate']);
+    String repeatValue = task['repeatDays'];
+
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: Text('Edit Task'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: titleController,
+                decoration: InputDecoration(labelText: 'Task Title'),
+              ),
+              TextField(
+                controller: descriptionController,
+                decoration: InputDecoration(labelText: 'Task Description'),
+              ),
+              ElevatedButton(
+                onPressed: () async {
+                  final pickedDate = await showDatePicker(
+                    context: context,
+                    initialDate: selectedDate,
+                    firstDate: DateTime.now(),
+                    lastDate: DateTime(2100),
+                  );
+                  if (pickedDate != null) {
+                    selectedDate = pickedDate;
+                  }
+                },
+                child: Text('Pick Due Date'),
+              ),
+              DropdownButton<String>(
+                value: repeatValue,
+                items: <String>['once', 'daily', 'weekly', 'monthly', 'yearly']
+                    .map((String value) {
+                  return DropdownMenuItem<String>(
+                    value: value,
+                    child: Text(value),
+                  );
+                }).toList(),
+                onChanged: (String? newValue) {
+                  setState(() {
+                    repeatValue = newValue!;
+                  });
+                },
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: Text('Cancel'),
+            ),
+            TextButton(
+              onPressed: () {
+                final title = titleController.text;
+                final description = descriptionController.text;
+                if (title.isNotEmpty && description.isNotEmpty) {
+                  setState(() {
+                    task['title'] = title;
+                    task['description'] = description;
+                    task['dueDate'] = selectedDate.toIso8601String();
+                    task['repeatDays'] = repeatValue;
+                  });
+                  Navigator.of(context).pop();
+                }
+              },
+              child: Text('Save Changes'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  // Dialog to add a new task
   void _showAddTaskDialog(BuildContext context) {
     final titleController = TextEditingController();
     final descriptionController = TextEditingController();
     DateTime selectedDate = DateTime.now();
-    String repeatDays = 'Once';
+    String repeatValue = 'daily'; // Default repeat value
 
     showDialog(
       context: context,
@@ -176,19 +348,19 @@ class _TaskHomePageState extends State<TaskHomePage> with SingleTickerProviderSt
                 child: Text('Pick Due Date'),
               ),
               DropdownButton<String>(
-                value: repeatDays,
-                onChanged: (String? newValue) {
-                  setState(() {
-                    repeatDays = newValue!;
-                  });
-                },
-                items: <String>['Once', 'Daily', 'Weekly', 'Monthly', 'Yearly']
-                    .map<DropdownMenuItem<String>>((String value) {
+                value: repeatValue,
+                items: <String>['once', 'daily', 'weekly', 'monthly', 'yearly']
+                    .map((String value) {
                   return DropdownMenuItem<String>(
                     value: value,
                     child: Text(value),
                   );
                 }).toList(),
+                onChanged: (String? newValue) {
+                  setState(() {
+                    repeatValue = newValue!;
+                  });
+                },
               ),
             ],
           ),
@@ -202,7 +374,7 @@ class _TaskHomePageState extends State<TaskHomePage> with SingleTickerProviderSt
                 final title = titleController.text;
                 final description = descriptionController.text;
                 if (title.isNotEmpty && description.isNotEmpty) {
-                  _addTask(title, description, selectedDate, repeatDays);
+                  _addTask(title, description, selectedDate, repeatValue);
                   Navigator.of(context).pop();
                 }
               },
@@ -214,114 +386,20 @@ class _TaskHomePageState extends State<TaskHomePage> with SingleTickerProviderSt
     );
   }
 
-  void _markTaskAsCompleted(Map<String, dynamic> task) {
+  // Function to add task
+  Future<void> _addTask(String title, String description, DateTime dueDate, String repeatDays) async {
+    final newTask = {
+      'title': title,
+      'description': description,
+      'dueDate': dueDate.toIso8601String(),
+      'isCompleted': 0,
+      'repeatDays': repeatDays,
+    };
     setState(() {
-      if (task['isCompleted'] == 0) {
-        task['isCompleted'] = 1; // Mark as completed
-      }
+      _tasks.add(newTask);
     });
-  }
 
-  List<Map<String, dynamic>> _getTasksForToday() {
-    final today = DateTime.now();
-    return _tasks.where((task) {
-      final dueDate = DateTime.parse(task['dueDate']);
-      return dueDate.year == today.year &&
-          dueDate.month == today.month &&
-          dueDate.day == today.day &&
-          task['isCompleted'] == 0;
-    }).toList();
-  }
-
-  List<Map<String, dynamic>> _getCompletedTasks() {
-    return _tasks.where((task) => task['isCompleted'] == 1).toList();
-  }
-
-  List<Map<String, dynamic>> _getRepeatedTasks() {
-    return _tasks.where((task) => task['repeatDays'] != null && task['repeatDays'] != 'Once').toList();
-  }
-
-  Future<void> _scheduleNotification(Map<String, dynamic> task) async {
-    DateTime dueDate = DateTime.parse(task['dueDate']);
-    if (dueDate.isBefore(DateTime.now())) return;  // Don't schedule for past dates
-
-    var androidDetails = AndroidNotificationDetails(
-      'task_channel_id',
-      'Task Notifications',
-      channelDescription: 'This channel is used for task notifications.',
-      importance: Importance.high,
-      priority: Priority.high,
-    );
-    var notificationDetails = NotificationDetails(android: androidDetails);
-
-    await flutterLocalNotificationsPlugin.zonedSchedule(
-      task['id'], // Unique id for the task
-      task['title'],
-      task['description'],
-      TZDateTime.from(dueDate, (await FlutterTimezone.getLocalTimezone()) as Location), // Use correct timezone
-      notificationDetails,
-      androidAllowWhileIdle: true,
-      uiLocalNotificationDateInterpretation: UILocalNotificationDateInterpretation.absoluteTime,
-    );
-  }
-
-  void showWebNotification(String title, String body) {
-    if (html.Notification.permission == "granted") {
-      html.Notification(title, body: body);
-    } else if (html.Notification.permission != "denied") {
-      html.Notification.requestPermission().then((permission) {
-        if (permission == "granted") {
-          html.Notification(title, body: body);
-        }
-      });
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: Text('Task Manager'),
-        bottom: TabBar(
-          controller: _tabController,
-          tabs: [
-            Tab(text: 'Today'),
-            Tab(text: 'Completed'),
-            Tab(text: 'Repeated'),
-            Tab(text: 'All'),
-          ],
-        ),
-      ),
-      body: TabBarView(
-        controller: _tabController,
-        children: [
-          _buildTaskListView(_getTasksForToday()),
-          _buildTaskListView(_getCompletedTasks()),
-          _buildTaskListView(_getRepeatedTasks()),
-          _buildTaskListView(_tasks),
-        ],
-      ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () => _showAddTaskDialog(context),
-        child: Icon(Icons.add),
-      ),
-    );
-  }
-
-  Widget _buildTaskListView(List<Map<String, dynamic>> tasks) {
-    return ListView.builder(
-      itemCount: tasks.length,
-      itemBuilder: (context, index) {
-        final task = tasks[index];
-        return ListTile(
-          title: Text(task['title']),
-          subtitle: Text(task['description']),
-          trailing: task['isCompleted'] == 1
-              ? Icon(Icons.check_circle, color: Colors.green)
-              : Icon(Icons.circle_outlined),
-          onTap: () => _markTaskAsCompleted(task),
-        );
-      },
-    );
+    // Check if the task is due today and show notification
+    _checkIfTaskIsDueToday(newTask);
   }
 }
