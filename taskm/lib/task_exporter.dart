@@ -1,104 +1,90 @@
-// task_exporter.dart
-
 import 'dart:convert';
 import 'dart:html' as html;
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
-import 'package:pdf/pdf.dart';
-import 'package:pdf/widgets.dart' as pw;
-import 'package:flutter/services.dart';
 
 class TaskExporter {
-  final List<Map<String, dynamic>> tasks;
+  // Function to export tasks to CSV
+  static void exportTasksToCSV(List<Map<String, dynamic>> tasks) {
+    // Define CSV headers
+    String csv = 'Title,Description,Due Date,Completed,Repeat Interval\n';
 
-  TaskExporter(this.tasks);
-
-  // Method to export tasks to CSV
-  void exportToCSV() {
-    final StringBuffer csvBuffer = StringBuffer();
-    csvBuffer.writeln('Title,Description,Due Date,Status');
+    // Loop through tasks to add each as a CSV row
     for (var task in tasks) {
-      String title = task['title'];
-      String description = task['description'];
-      String dueDate = task['dueDate'];
-      String status = task['isCompleted'] ? 'Completed' : 'Pending';
+      String title = task['title'] ?? '';
+      String description = task['description'] ?? '';
+      String dueDate = task['dueDate'] ?? '';
+      String completed = task['isCompleted'] ? 'Yes' : 'No';
+      String repeatInterval = task['repeatInterval'] ?? 'None';
 
-      csvBuffer.writeln('$title,$description,$dueDate,$status');
+      // Format each task entry as a CSV row
+      csv += '$title,$description,$dueDate,$completed,$repeatInterval\n';
     }
 
-    final csvData = const Utf8Encoder().convert(csvBuffer.toString());
-    final blob = html.Blob([csvData], 'text/csv');
+    // Create a Blob to hold CSV data
+    final bytes = utf8.encode(csv);
+    final blob = html.Blob([bytes]);
+
+    // Generate a download link
     final url = html.Url.createObjectUrlFromBlob(blob);
     final anchor = html.AnchorElement(href: url)
-      ..setAttribute("download", "tasks.csv")
+      ..setAttribute('download', 'tasks.csv')
       ..click();
+
+    // Clean up after download
     html.Url.revokeObjectUrl(url);
   }
 
-  // Method to export tasks to PDF
-  void exportToPDF() async {
-    final pdf = pw.Document();
+  // Function to export tasks to JSON
+  static void exportTasksToJson(List<Map<String, dynamic>> tasks) {
+    // Convert tasks to JSON string format
+    String json = jsonEncode(tasks);
 
-    pdf.addPage(
-      pw.Page(
-        build: (pw.Context context) {
-          return pw.Column(
-            children: [
-              pw.Text("Task List", style: pw.TextStyle(fontSize: 24)),
-              pw.SizedBox(height: 20),
-              pw.ListView.builder(
-                itemCount: tasks.length,
-                itemBuilder: (context, index) {
-                  final task = tasks[index];
-                  return pw.Column(
-                    crossAxisAlignment: pw.CrossAxisAlignment.start,
-                    children: [
-                      pw.Text('Title: ${task['title']}',
-                          style: pw.TextStyle(fontSize: 18)),
-                      pw.Text('Description: ${task['description']}'),
-                      pw.Text(
-                          'Due Date: ${DateFormat('yyyy-MM-dd').format(DateTime.parse(task['dueDate']))}'),
-                      pw.Text('Status: ${task['isCompleted'] ? 'Completed' : 'Pending'}'),
-                      pw.Divider(),
-                    ],
-                  );
-                },
-              ),
-            ],
-          );
-        },
-      ),
-    );
+    // Create a Blob for JSON data
+    final bytes = utf8.encode(json);
+    final blob = html.Blob([bytes]);
 
-    final pdfBytes = await pdf.save();
-    final blob = html.Blob([pdfBytes], 'application/pdf');
+    // Generate a download link
     final url = html.Url.createObjectUrlFromBlob(blob);
     final anchor = html.AnchorElement(href: url)
-      ..setAttribute("download", "tasks.pdf")
+      ..setAttribute('download', 'tasks.json')
       ..click();
+
+    // Clean up URL after download
     html.Url.revokeObjectUrl(url);
   }
 
-  // Method to share tasks via email
-  void exportToEmail() {
-    String emailBody = "Task List:\n\n";
-    for (var task in tasks) {
-      String title = task['title'];
-      String description = task['description'];
-      String dueDate = DateFormat('yyyy-MM-dd').format(DateTime.parse(task['dueDate']));
-      String status = task['isCompleted'] ? 'Completed' : 'Pending';
-
-      emailBody += "Title: $title\nDescription: $description\nDue Date: $dueDate\nStatus: $status\n\n";
-    }
-
-    final emailUri = Uri(
-      scheme: 'mailto',
-      queryParameters: {
-        'subject': 'Exported Task List',
-        'body': emailBody,
+  // Function to display export options in a dialog
+  static void showExportDialog(BuildContext context, List<Map<String, dynamic>> tasks) {
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: Text('Export Tasks'),
+          content: Text('Choose export format:'),
+          actions: [
+            TextButton(
+              onPressed: () {
+                exportTasksToCSV(tasks);
+                Navigator.pop(context); // Close dialog
+              },
+              child: Text('Export as CSV'),
+            ),
+            TextButton(
+              onPressed: () {
+                exportTasksToJson(tasks);
+                Navigator.pop(context); // Close dialog
+              },
+              child: Text('Export as JSON'),
+            ),
+            TextButton(
+              onPressed: () {
+                Navigator.pop(context); // Cancel export
+              },
+              child: Text('Cancel'),
+            ),
+          ],
+        );
       },
     );
-
-    html.window.open(emailUri.toString(), '_blank');
   }
 }
