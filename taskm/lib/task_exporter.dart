@@ -1,104 +1,116 @@
-import 'dart:html' as html;
-import 'dart:convert';
-import 'package:flutter/material.dart';
-import 'package:csv/csv.dart';
+import 'dart:io';
+import 'package:path_provider/path_provider.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
-import 'package:mailer/mailer.dart';
-import 'package:mailer/smtp_server.dart';
+import 'package:csv/csv.dart';
+import 'package:flutter_email_sender/flutter_email_sender.dart';
+import 'package:flutter/material.dart';
 
-// Export tasks to CSV
-void exportToCSV(List<Map<String, dynamic>> tasks) {
-  List<List<dynamic>> rows = [];
-  rows.add(['ID', 'Title', 'Description', 'Due Date', 'Completed', 'Repeating']); // CSV headers
+class TaskExporter {
+  // Export tasks to PDF
+  static Future<void> exportToPDF(List<Map<String, dynamic>> tasks, BuildContext context) async {
+    final pdf = pw.Document();
 
-  tasks.forEach((task) {
-    rows.add([
-      task['id'],
-      task['title'],
-      task['description'],
-      task['dueDate'],
-      task['isCompleted'] ? 'Yes' : 'No',
-      task['repeatInterval']
-    ]);
-  });
+    pdf.addPage(
+      pw.Page(
+        build: (pw.Context context) {
+          return pw.Column(
+            children: [
+              pw.Text('Task List', style: pw.TextStyle(fontSize: 24)),
+              pw.SizedBox(height: 20),
+              pw.Table.fromTextArray(
+                headers: ['Title', 'Description', 'Due Date', 'Status'],
+                data: tasks.map((task) {
+                  return [
+                    task['title'],
+                    task['description'],
+                    task['dueDate'],
+                    task['isCompleted'] ? 'Completed' : 'Pending',
+                  ];
+                }).toList(),
+              ),
+            ],
+          );
+        },
+      ),
+    );
 
-  String csvData = const ListToCsvConverter().convert(rows);
-  final blob = html.Blob([csvData]);
-  final url = html.Url.createObjectUrlFromBlob(blob);
-  final anchor = html.AnchorElement(href: url)
-    ..target = 'blank'
-    ..download = 'tasks.csv'
-    ..click();
-  html.Url.revokeObjectUrl(url);
-}
+    try {
+      final output = await getTemporaryDirectory();
+      final file = File("${output.path}/tasks.pdf");
+      await file.writeAsBytes(await pdf.save());
 
-// Export tasks to PDF
-void exportToPDF(List<Map<String, dynamic>> tasks) async {
-  final pdf = pw.Document();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('PDF exported to ${file.path}')),
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error exporting PDF: $e')),
+      );
+    }
+  }
 
-  pdf.addPage(
-    pw.Page(
-      build: (pw.Context context) {
-        return pw.Column(
-          children: [
-            pw.Text('Task List', style: pw.TextStyle(fontSize: 24)),
-            pw.Table.fromTextArray(headers: ['ID', 'Title', 'Description', 'Due Date', 'Completed', 'Repeating'],
-              data: tasks.map((task) {
-                return [
-                  task['id'],
-                  task['title'],
-                  task['description'],
-                  task['dueDate'],
-                  task['isCompleted'] ? 'Yes' : 'No',
-                  task['repeatInterval'],
-                ];
-              }).toList(),
-            ),
-          ],
-        );
-      },
-    ),
-  );
+  // Export tasks to CSV
+  static Future<void> exportToCSV(List<Map<String, dynamic>> tasks, BuildContext context) async {
+    List<List<dynamic>> rows = [
+      ['Title', 'Description', 'Due Date', 'Status']
+    ];
 
-  final output = await pdf.save();
-  final blob = html.Blob([output]);
-  final url = html.Url.createObjectUrlFromBlob(blob);
-  final anchor = html.AnchorElement(href: url)
-    ..target = 'blank'
-    ..download = 'tasks.pdf'
-    ..click();
-  html.Url.revokeObjectUrl(url);
-}
+    for (var task in tasks) {
+      rows.add([
+        task['title'],
+        task['description'],
+        task['dueDate'],
+        task['isCompleted'] ? 'Completed' : 'Pending',
+      ]);
+    }
 
-// Export tasks via Email
-Future<void> exportViaEmail(List<Map<String, dynamic>> tasks, String recipientEmail) async {
-  final smtpServer = gmail('your_email@gmail.com', 'your_password'); // Use environment variables for security
-  final message = Message()
-    ..from = Address('your_email@gmail.com', 'Task Manager')
-    ..recipients.add(recipientEmail)
-    ..subject = 'Task Export'
-    ..text = 'Please find the attached task list.';
+    String csvData = const ListToCsvConverter().convert(rows);
 
-  final csvData = const ListToCsvConverter().convert([
-    ['ID', 'Title', 'Description', 'Due Date', 'Completed', 'Repeating'],
-    ...tasks.map((task) => [
-      task['id'],
-      task['title'],
-      task['description'],
-      task['dueDate'],
-      task['isCompleted'] ? 'Yes' : 'No',
-      task['repeatInterval']
-    ])
-  ]);
-  
-  final attachment = Attachment.fromBytes('tasks.csv', utf8.encode(csvData));
-  message.attachments.add(attachment);
+    try {
+      final output = await getTemporaryDirectory();
+      final file = File("${output.path}/tasks.csv");
+      await file.writeAsString(csvData);
 
-  try {
-    final sendReport = await send(message, smtpServer);
-    print('Message sent: ' + sendReport.toString());
-  } on MailerException catch (e) {
-    print('Message not sent. Exception: ' + e.toString());
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('CSV exported to ${file.path}')),
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error exporting CSV: $e')),
+      );
+    }
+  }
+
+  // Export tasks via email
+  static Future<void> exportToEmail(List<Map<String, dynamic>> tasks, BuildContext context) async {
+    String subject = 'Task List';
+    String body = 'Here is the list of tasks:\n\n';
+
+    for (var task in tasks) {
+      body += 'Title: ${task['title']}\n';
+      body += 'Description: ${task['description']}\n';
+      body += 'Due Date: ${task['dueDate']}\n';
+      body += 'Status: ${task['isCompleted'] ? 'Completed' : 'Pending'}\n\n';
+    }
+
+    final email = Email(
+      subject: subject,
+      body: body,
+      recipients: ['example@example.com'], // Replace with the actual recipient
+      isHTML: false,
+    );
+
+    try {
+      await FlutterEmailSender.send(email);
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Email sent successfully')),
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error sending email: $e')),
+      );
+    }
   }
 }

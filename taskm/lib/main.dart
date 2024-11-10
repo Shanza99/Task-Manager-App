@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:intl/intl.dart';
+import 'task_exporter.dart'; // Import TaskExporter
 
 void main() {
   runApp(TaskManagerApp());
@@ -181,90 +182,115 @@ class _TaskHomePageState extends State<TaskHomePage> with SingleTickerProviderSt
         onPressed: () => _showAddTaskDialog(context),
         child: Icon(Icons.add),
       ),
+      // Add the export options button below
+      floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
+      bottomNavigationBar: BottomAppBar(
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceAround,
+          children: [
+            IconButton(
+              icon: Icon(Icons.picture_as_pdf),
+              onPressed: () {
+                TaskExporter.exportToPDF(_tasks, context);
+              },
+            ),
+            IconButton(
+              icon: Icon(Icons.save_alt),
+              onPressed: () {
+                TaskExporter.exportToCSV(_tasks, context);
+              },
+            ),
+            IconButton(
+              icon: Icon(Icons.email),
+              onPressed: () {
+                TaskExporter.exportToEmail(_tasks, context);
+              },
+            ),
+          ],
+        ),
+      ),
     );
   }
 
   // Function to build task list
-Widget _buildTaskList(List<Map<String, dynamic>> tasks) {
-  return ListView.builder(
-    itemCount: tasks.length,
-    itemBuilder: (context, index) {
-      var task = tasks[index];
-      return ListTile(
-        title: Row(
-          children: [
-            Text(task['title']),
-            if (task['repeatInterval'] != 'None') ...[
-              SizedBox(width: 8),
-              Text(
-                '(Repeated)',
-                style: TextStyle(color: Colors.blue, fontStyle: FontStyle.italic),
+  Widget _buildTaskList(List<Map<String, dynamic>> tasks) {
+    return ListView.builder(
+      itemCount: tasks.length,
+      itemBuilder: (context, index) {
+        var task = tasks[index];
+        return ListTile(
+          title: Row(
+            children: [
+              Text(task['title']),
+              if (task['repeatInterval'] != 'None') ...[
+                SizedBox(width: 8),
+                Text(
+                  '(Repeated)',
+                  style: TextStyle(color: Colors.blue, fontStyle: FontStyle.italic),
+                ),
+              ],
+            ],
+          ),
+          subtitle: Text(task['description']),
+          trailing: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              IconButton(
+                icon: Icon(Icons.edit),
+                onPressed: () => _showEditTaskDialog(context, task),
+              ),
+              IconButton(
+                icon: Icon(Icons.check),
+                onPressed: () {
+                  setState(() {
+                    task['isCompleted'] = true; // Mark as completed
+                  });
+                },
+              ),
+              IconButton(
+                icon: Icon(Icons.delete),
+                onPressed: () {
+                  // Show delete confirmation dialog
+                  showDialog(
+                    context: context,
+                    builder: (context) {
+                      return AlertDialog(
+                        title: Text('Delete Task'),
+                        content: Text('Are you sure you want to delete this task?'),
+                        actions: [
+                          TextButton(
+                            onPressed: () {
+                              Navigator.pop(context); // Cancel the deletion
+                            },
+                            child: Text('Cancel'),
+                          ),
+                          TextButton(
+                            onPressed: () {
+                              setState(() {
+                                _tasks.removeAt(index); // Remove task from list
+                              });
+                              Navigator.pop(context); // Close the dialog
+                            },
+                            child: Text('Delete'),
+                          ),
+                        ],
+                      );
+                    },
+                  );
+                },
               ),
             ],
-          ],
-        ),
-        subtitle: Text(task['description']),
-        trailing: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            IconButton(
-              icon: Icon(Icons.edit),
-              onPressed: () => _showEditTaskDialog(context, task),
-            ),
-            IconButton(
-              icon: Icon(Icons.check),
-              onPressed: () {
-                setState(() {
-                  task['isCompleted'] = true; // Mark as completed
-                });
-              },
-            ),
-            IconButton(
-              icon: Icon(Icons.delete),
-              onPressed: () {
-                // Show delete confirmation dialog
-                showDialog(
-                  context: context,
-                  builder: (context) {
-                    return AlertDialog(
-                      title: Text('Delete Task'),
-                      content: Text('Are you sure you want to delete this task?'),
-                      actions: [
-                        TextButton(
-                          onPressed: () {
-                            Navigator.pop(context); // Cancel the deletion
-                          },
-                          child: Text('Cancel'),
-                        ),
-                        TextButton(
-                          onPressed: () {
-                            setState(() {
-                              _tasks.removeAt(index); // Remove task from list
-                            });
-                            Navigator.pop(context); // Close the dialog
-                          },
-                          child: Text('Delete'),
-                        ),
-                      ],
-                    );
-                  },
-                );
-              },
-            ),
-          ],
-        ),
-      );
-    },
-  );
-}
+          ),
+        );
+      },
+    );
+  }
 
   // Dialog to edit a task
   void _showEditTaskDialog(BuildContext context, Map<String, dynamic> task) {
     final titleController = TextEditingController(text: task['title']);
     final descriptionController = TextEditingController(text: task['description']);
     DateTime selectedDate = DateTime.parse(task['dueDate']);
-    bool isRepeating = task['isRepeating'];
-    String repeatInterval = task['repeatInterval'] ?? 'None';
 
     showDialog(
       context: context,
@@ -272,80 +298,37 @@ Widget _buildTaskList(List<Map<String, dynamic>> tasks) {
         return AlertDialog(
           title: Text('Edit Task'),
           content: Column(
+            mainAxisSize: MainAxisSize.min,
             children: [
               TextField(
                 controller: titleController,
-                decoration: InputDecoration(labelText: 'Title'),
+                decoration: InputDecoration(labelText: 'Task Title'),
               ),
               TextField(
                 controller: descriptionController,
                 decoration: InputDecoration(labelText: 'Description'),
               ),
-              // DateTime Picker
+              SizedBox(height: 8),
               Row(
                 children: [
-                  Text("Due Date: ${DateFormat('yyyy-MM-dd').format(selectedDate)}"),
-                  IconButton(
-                    icon: Icon(Icons.calendar_today),
+                  Text('Due Date: '),
+                  TextButton(
                     onPressed: () async {
                       DateTime? pickedDate = await showDatePicker(
                         context: context,
                         initialDate: selectedDate,
-                        firstDate: DateTime(2000),
-                        lastDate: DateTime(2100),
+                        firstDate: DateTime(2020),
+                        lastDate: DateTime(2101),
                       );
-                      if (pickedDate != null && pickedDate != selectedDate) {
+                      if (pickedDate != null) {
                         setState(() {
                           selectedDate = pickedDate;
                         });
                       }
                     },
-                  ),
-                ],
-              ),
-              Row(
-                children: [
-                  Text("Time: ${DateFormat('HH:mm').format(selectedDate)}"),
-                  IconButton(
-                    icon: Icon(Icons.access_time),
-                    onPressed: () async {
-                      TimeOfDay? pickedTime = await showTimePicker(
-                        context: context,
-                        initialTime: TimeOfDay.fromDateTime(selectedDate),
-                      );
-                      if (pickedTime != null) {
-                        setState(() {
-                          selectedDate = DateTime(
-                            selectedDate.year,
-                            selectedDate.month,
-                            selectedDate.day,
-                            pickedTime.hour,
-                            pickedTime.minute,
-                          );
-                        });
-                      }
-                    },
-                  ),
-                ],
-              ),
-              // Repeating task selection
-              Row(
-                children: [
-                  Text("Repeat: "),
-                  DropdownButton<String>(
-                    value: repeatInterval,
-                    items: ['None', 'Daily', 'Weekly', 'Monthly']
-                        .map((String value) {
-                          return DropdownMenuItem<String>(
-                            value: value,
-                            child: Text(value),
-                          );
-                        }).toList(),
-                    onChanged: (value) {
-                      setState(() {
-                        repeatInterval = value!;
-                      });
-                    },
+                    child: Text(
+                      DateFormat('yyyy-MM-dd').format(selectedDate),
+                    ),
                   ),
                 ],
               ),
@@ -354,18 +337,20 @@ Widget _buildTaskList(List<Map<String, dynamic>> tasks) {
           actions: [
             TextButton(
               onPressed: () {
+                Navigator.pop(context); // Close the dialog
+              },
+              child: Text('Cancel'),
+            ),
+            TextButton(
+              onPressed: () {
                 setState(() {
                   task['title'] = titleController.text;
                   task['description'] = descriptionController.text;
                   task['dueDate'] = selectedDate.toIso8601String();
-                  task['isRepeating'] = isRepeating;
-                  task['repeatInterval'] = repeatInterval;
-                  // After saving, check if task is due today
-                  _checkIfTaskIsDueToday(task);
                 });
-                Navigator.pop(context);
+                Navigator.pop(context); // Close the dialog
               },
-              child: Text('Save Task'),
+              child: Text('Save'),
             ),
           ],
         );
@@ -373,100 +358,61 @@ Widget _buildTaskList(List<Map<String, dynamic>> tasks) {
     );
   }
 
-  // Dialog to add a new task
+  // Dialog to add a task
   void _showAddTaskDialog(BuildContext context) {
     final titleController = TextEditingController();
     final descriptionController = TextEditingController();
     DateTime selectedDate = DateTime.now();
-    bool isRepeating = false;
-    String repeatInterval = 'None';
 
     showDialog(
       context: context,
       builder: (context) {
         return AlertDialog(
-          title: Text('Add Task'),
+          title: Text('Add New Task'),
           content: Column(
+            mainAxisSize: MainAxisSize.min,
             children: [
               TextField(
                 controller: titleController,
-                decoration: InputDecoration(labelText: 'Title'),
+                decoration: InputDecoration(labelText: 'Task Title'),
               ),
               TextField(
                 controller: descriptionController,
                 decoration: InputDecoration(labelText: 'Description'),
               ),
-              // DateTime Picker
+              SizedBox(height: 8),
               Row(
                 children: [
-                  Text("Due Date: ${DateFormat('yyyy-MM-dd').format(selectedDate)}"),
-                  IconButton(
-                    icon: Icon(Icons.calendar_today),
+                  Text('Due Date: '),
+                  TextButton(
                     onPressed: () async {
                       DateTime? pickedDate = await showDatePicker(
                         context: context,
                         initialDate: selectedDate,
-                        firstDate: DateTime(2000),
-                        lastDate: DateTime(2100),
+                        firstDate: DateTime(2020),
+                        lastDate: DateTime(2101),
                       );
-                      if (pickedDate != null && pickedDate != selectedDate) {
+                      if (pickedDate != null) {
                         setState(() {
                           selectedDate = pickedDate;
                         });
                       }
                     },
-                  ),
-                ],
-              ),
-              Row(
-                children: [
-                  Text("Time: ${DateFormat('HH:mm').format(selectedDate)}"),
-                  IconButton(
-                    icon: Icon(Icons.access_time),
-                    onPressed: () async {
-                      TimeOfDay? pickedTime = await showTimePicker(
-                        context: context,
-                        initialTime: TimeOfDay.fromDateTime(selectedDate),
-                      );
-                      if (pickedTime != null) {
-                        setState(() {
-                          selectedDate = DateTime(
-                            selectedDate.year,
-                            selectedDate.month,
-                            selectedDate.day,
-                            pickedTime.hour,
-                            pickedTime.minute,
-                          );
-                        });
-                      }
-                    },
-                  ),
-                ],
-              ),
-              // Repeating task selection
-              Row(
-                children: [
-                  Text("Repeat: "),
-                  DropdownButton<String>(
-                    value: repeatInterval,
-                    items: ['None', 'Daily', 'Weekly', 'Monthly']
-                        .map((String value) {
-                          return DropdownMenuItem<String>(
-                            value: value,
-                            child: Text(value),
-                          );
-                        }).toList(),
-                    onChanged: (value) {
-                      setState(() {
-                        repeatInterval = value!;
-                      });
-                    },
+                    child: Text(
+                      DateFormat('yyyy-MM-dd').format(selectedDate),
+                    ),
                   ),
                 ],
               ),
             ],
           ),
           actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.pop(context); // Close the dialog
+              },
+              child: Text('Cancel'),
+            ),
             TextButton(
               onPressed: () {
                 setState(() {
@@ -476,15 +422,13 @@ Widget _buildTaskList(List<Map<String, dynamic>> tasks) {
                     'description': descriptionController.text,
                     'dueDate': selectedDate.toIso8601String(),
                     'isCompleted': false,
-                    'isRepeating': isRepeating,
-                    'repeatInterval': repeatInterval,
+                    'isRepeating': false,
+                    'repeatInterval': null,
                   });
-                  // Check if the newly created task is due today
-                  _checkIfTaskIsDueToday(_tasks.last);
                 });
-                Navigator.pop(context);
+                Navigator.pop(context); // Close the dialog
               },
-              child: Text('Add Task'),
+              child: Text('Add'),
             ),
           ],
         );
