@@ -3,7 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:intl/intl.dart';
-import 'task_exporter.dart'; // Make sure you have this import
+import 'task_exporter.dart'; // Import TaskExporter
 
 void main() {
   runApp(TaskManagerApp());
@@ -156,6 +156,19 @@ class _TaskHomePageState extends State<TaskHomePage> with SingleTickerProviderSt
     return _tasks.where((task) => task['isCompleted'] == true).toList();
   }
 
+  // Export methods (added for the exporting feature)
+  void _exportToPDF() {
+    TaskExporter.exportToPDF(_tasks, context); // Pass BuildContext here
+  }
+
+  void _exportToCSV() {
+    TaskExporter.exportToCSV(_tasks, context); // Pass BuildContext here
+  }
+
+  void _exportToEmail() {
+    TaskExporter.exportToEmail(_tasks, context); // Pass BuildContext here
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -182,6 +195,21 @@ class _TaskHomePageState extends State<TaskHomePage> with SingleTickerProviderSt
         onPressed: () => _showAddTaskDialog(context),
         child: Icon(Icons.add),
       ),
+      // Adding the export buttons for PDF, CSV, and Email export
+      persistentFooterButtons: [
+        ElevatedButton(
+          onPressed: _exportToPDF, // Trigger export to PDF
+          child: Text('Export to PDF'),
+        ),
+        ElevatedButton(
+          onPressed: _exportToCSV, // Trigger export to CSV
+          child: Text('Export to CSV'),
+        ),
+        ElevatedButton(
+          onPressed: _exportToEmail, // Trigger export via Email
+          child: Text('Export via Email'),
+        ),
+      ],
     );
   }
 
@@ -267,11 +295,10 @@ class _TaskHomePageState extends State<TaskHomePage> with SingleTickerProviderSt
 
     showDialog(
       context: context,
-      builder: (context) {
+      builder: (BuildContext context) {
         return AlertDialog(
           title: Text('Edit Task'),
           content: Column(
-            mainAxisSize: MainAxisSize.min,
             children: [
               TextField(
                 controller: titleController,
@@ -279,29 +306,27 @@ class _TaskHomePageState extends State<TaskHomePage> with SingleTickerProviderSt
               ),
               TextField(
                 controller: descriptionController,
-                decoration: InputDecoration(labelText: 'Description'),
+                decoration: InputDecoration(labelText: 'Task Description'),
               ),
-              SizedBox(height: 8),
+              // Date picker for due date
               Row(
                 children: [
-                  Text('Due Date: '),
-                  TextButton(
+                  Text('Due Date: ${DateFormat.yMd().format(selectedDate)}'),
+                  IconButton(
+                    icon: Icon(Icons.calendar_today),
                     onPressed: () async {
-                      DateTime? pickedDate = await showDatePicker(
+                      final DateTime? picked = await showDatePicker(
                         context: context,
                         initialDate: selectedDate,
                         firstDate: DateTime(2020),
-                        lastDate: DateTime(2101),
+                        lastDate: DateTime(2121),
                       );
-                      if (pickedDate != null) {
+                      if (picked != null && picked != selectedDate) {
                         setState(() {
-                          selectedDate = pickedDate;
+                          selectedDate = picked;
                         });
                       }
                     },
-                    child: Text(
-                      DateFormat('yyyy-MM-dd').format(selectedDate),
-                    ),
                   ),
                 ],
               ),
@@ -310,7 +335,7 @@ class _TaskHomePageState extends State<TaskHomePage> with SingleTickerProviderSt
           actions: [
             TextButton(
               onPressed: () {
-                Navigator.pop(context); // Close the dialog
+                Navigator.pop(context); // Close dialog without saving
               },
               child: Text('Cancel'),
             ),
@@ -321,9 +346,9 @@ class _TaskHomePageState extends State<TaskHomePage> with SingleTickerProviderSt
                   task['description'] = descriptionController.text;
                   task['dueDate'] = selectedDate.toIso8601String();
                 });
-                Navigator.pop(context); // Close the dialog
+                Navigator.pop(context); // Close dialog after saving
               },
-              child: Text('Save'),
+              child: Text('Save Changes'),
             ),
           ],
         );
@@ -331,7 +356,7 @@ class _TaskHomePageState extends State<TaskHomePage> with SingleTickerProviderSt
     );
   }
 
-  // Dialog to add a task
+  // Dialog to add a new task
   void _showAddTaskDialog(BuildContext context) {
     final titleController = TextEditingController();
     final descriptionController = TextEditingController();
@@ -339,11 +364,10 @@ class _TaskHomePageState extends State<TaskHomePage> with SingleTickerProviderSt
 
     showDialog(
       context: context,
-      builder: (context) {
+      builder: (BuildContext context) {
         return AlertDialog(
           title: Text('Add New Task'),
           content: Column(
-            mainAxisSize: MainAxisSize.min,
             children: [
               TextField(
                 controller: titleController,
@@ -351,29 +375,27 @@ class _TaskHomePageState extends State<TaskHomePage> with SingleTickerProviderSt
               ),
               TextField(
                 controller: descriptionController,
-                decoration: InputDecoration(labelText: 'Description'),
+                decoration: InputDecoration(labelText: 'Task Description'),
               ),
-              SizedBox(height: 8),
+              // Date picker for due date
               Row(
                 children: [
-                  Text('Due Date: '),
-                  TextButton(
+                  Text('Due Date: ${DateFormat.yMd().format(selectedDate)}'),
+                  IconButton(
+                    icon: Icon(Icons.calendar_today),
                     onPressed: () async {
-                      DateTime? pickedDate = await showDatePicker(
+                      final DateTime? picked = await showDatePicker(
                         context: context,
                         initialDate: selectedDate,
                         firstDate: DateTime(2020),
-                        lastDate: DateTime(2101),
+                        lastDate: DateTime(2121),
                       );
-                      if (pickedDate != null) {
+                      if (picked != null && picked != selectedDate) {
                         setState(() {
-                          selectedDate = pickedDate;
+                          selectedDate = picked;
                         });
                       }
                     },
-                    child: Text(
-                      DateFormat('yyyy-MM-dd').format(selectedDate),
-                    ),
                   ),
                 ],
               ),
@@ -382,7 +404,7 @@ class _TaskHomePageState extends State<TaskHomePage> with SingleTickerProviderSt
           actions: [
             TextButton(
               onPressed: () {
-                Navigator.pop(context); // Close the dialog
+                Navigator.pop(context); // Close dialog without saving
               },
               child: Text('Cancel'),
             ),
@@ -390,39 +412,22 @@ class _TaskHomePageState extends State<TaskHomePage> with SingleTickerProviderSt
               onPressed: () {
                 setState(() {
                   _tasks.add({
-                    'id': DateTime.now().millisecondsSinceEpoch,
+                    'id': _tasks.length + 1,
                     'title': titleController.text,
                     'description': descriptionController.text,
                     'dueDate': selectedDate.toIso8601String(),
                     'isCompleted': false,
                     'isRepeating': false,
-                    'repeatInterval': null,
+                    'repeatInterval': null, // Default to no repeat
                   });
                 });
-                Navigator.pop(context); // Close the dialog
+                Navigator.pop(context); // Close dialog after adding task
               },
-              child: Text('Add'),
+              child: Text('Add Task'),
             ),
           ],
         );
       },
     );
-  }
-
-  // Export Functions
-
-  // Function to export tasks to PDF
-  void _exportToPDF() {
-    TaskExporter.exportToPDF(_tasks);
-  }
-
-  // Function to export tasks to CSV
-  void _exportToCSV() {
-    TaskExporter.exportToCSV(_tasks);
-  }
-
-  // Function to export tasks via Email
-  void _exportToEmail() {
-    TaskExporter.exportToEmail(_tasks);
   }
 }
