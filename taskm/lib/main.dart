@@ -56,7 +56,7 @@ class _TaskHomePageState extends State<TaskHomePage> with SingleTickerProviderSt
     flutterLocalNotificationsPlugin = FlutterLocalNotificationsPlugin();
     var initializationSettingsAndroid = AndroidInitializationSettings('app_icon');
     var initializationSettings = InitializationSettings(android: initializationSettingsAndroid);
-    flutterLocalNotificationsPlugin!.initialize(initializationSettings, onSelectNotification: _onSelectNotification);
+    flutterLocalNotificationsPlugin!.initialize(initializationSettings);
   }
 
   // Function for triggering web notifications
@@ -94,12 +94,6 @@ class _TaskHomePageState extends State<TaskHomePage> with SingleTickerProviderSt
         'repeatInterval': null, // No repeating interval
       },
     ];
-  }
-
-  // Function to handle notification selection
-  Future<void> _onSelectNotification(String? payload) async {
-    // You can implement what should happen when a notification is tapped
-    print("Notification tapped: $payload");
   }
 
   // Check if task is due today and show notification
@@ -248,7 +242,43 @@ class _TaskHomePageState extends State<TaskHomePage> with SingleTickerProviderSt
               ),
               IconButton(
                 icon: Icon(Icons.check),
-                onPressed: () => _toggleTaskCompletion(task),
+                onPressed: () {
+                  setState(() {
+                    task['isCompleted'] = true; // Mark as completed
+                  });
+                },
+              ),
+              IconButton(
+                icon: Icon(Icons.delete),
+                onPressed: () {
+                  // Show delete confirmation dialog
+                  showDialog(
+                    context: context,
+                    builder: (context) {
+                      return AlertDialog(
+                        title: Text('Delete Task'),
+                        content: Text('Are you sure you want to delete this task?'),
+                        actions: [
+                          TextButton(
+                            onPressed: () {
+                              Navigator.pop(context); // Cancel the deletion
+                            },
+                            child: Text('Cancel'),
+                          ),
+                          TextButton(
+                            onPressed: () {
+                              setState(() {
+                                _tasks.removeAt(index); // Remove task from list
+                              });
+                              Navigator.pop(context); // Close the dialog
+                            },
+                            child: Text('Delete'),
+                          ),
+                        ],
+                      );
+                    },
+                  );
+                },
               ),
             ],
           ),
@@ -257,24 +287,17 @@ class _TaskHomePageState extends State<TaskHomePage> with SingleTickerProviderSt
     );
   }
 
-  // Function to toggle task completion
-  void _toggleTaskCompletion(Map<String, dynamic> task) {
-    setState(() {
-      task['isCompleted'] = !task['isCompleted'];
-    });
-  }
-
-  // Dialog for adding task
-  void _showAddTaskDialog(BuildContext context) {
-    final titleController = TextEditingController();
-    final descriptionController = TextEditingController();
-    DateTime selectedDate = DateTime.now();
+  // Dialog to edit a task
+  void _showEditTaskDialog(BuildContext context, Map<String, dynamic> task) {
+    final titleController = TextEditingController(text: task['title']);
+    final descriptionController = TextEditingController(text: task['description']);
+    DateTime selectedDate = DateTime.parse(task['dueDate']);
 
     showDialog(
       context: context,
       builder: (BuildContext context) {
         return AlertDialog(
-          title: Text('Add New Task'),
+          title: Text('Edit Task'),
           content: Column(
             children: [
               TextField(
@@ -285,6 +308,7 @@ class _TaskHomePageState extends State<TaskHomePage> with SingleTickerProviderSt
                 controller: descriptionController,
                 decoration: InputDecoration(labelText: 'Task Description'),
               ),
+              // Date picker for due date
               Row(
                 children: [
                   Text('Due Date: ${DateFormat.yMd().format(selectedDate)}'),
@@ -311,7 +335,76 @@ class _TaskHomePageState extends State<TaskHomePage> with SingleTickerProviderSt
           actions: [
             TextButton(
               onPressed: () {
-                Navigator.pop(context);
+                Navigator.pop(context); // Close dialog without saving
+              },
+              child: Text('Cancel'),
+            ),
+            TextButton(
+              onPressed: () {
+                setState(() {
+                  task['title'] = titleController.text;
+                  task['description'] = descriptionController.text;
+                  task['dueDate'] = selectedDate.toIso8601String();
+                });
+                Navigator.pop(context); // Close dialog after saving
+              },
+              child: Text('Save Changes'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  // Dialog to add a new task
+  void _showAddTaskDialog(BuildContext context) {
+    final titleController = TextEditingController();
+    final descriptionController = TextEditingController();
+    DateTime selectedDate = DateTime.now();
+
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: Text('Add New Task'),
+          content: Column(
+            children: [
+              TextField(
+                controller: titleController,
+                decoration: InputDecoration(labelText: 'Task Title'),
+              ),
+              TextField(
+                controller: descriptionController,
+                decoration: InputDecoration(labelText: 'Task Description'),
+              ),
+              // Date picker for due date
+              Row(
+                children: [
+                  Text('Due Date: ${DateFormat.yMd().format(selectedDate)}'),
+                  IconButton(
+                    icon: Icon(Icons.calendar_today),
+                    onPressed: () async {
+                      final DateTime? picked = await showDatePicker(
+                        context: context,
+                        initialDate: selectedDate,
+                        firstDate: DateTime(2020),
+                        lastDate: DateTime(2121),
+                      );
+                      if (picked != null && picked != selectedDate) {
+                        setState(() {
+                          selectedDate = picked;
+                        });
+                      }
+                    },
+                  ),
+                ],
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.pop(context); // Close dialog without saving
               },
               child: Text('Cancel'),
             ),
@@ -325,10 +418,10 @@ class _TaskHomePageState extends State<TaskHomePage> with SingleTickerProviderSt
                     'dueDate': selectedDate.toIso8601String(),
                     'isCompleted': false,
                     'isRepeating': false,
-                    'repeatInterval': null,
+                    'repeatInterval': null, // Default to no repeat
                   });
                 });
-                Navigator.pop(context);
+                Navigator.pop(context); // Close dialog after adding task
               },
               child: Text('Add Task'),
             ),
