@@ -231,7 +231,7 @@ class _TaskHomePageState extends State<TaskHomePage> with SingleTickerProviderSt
         title: Text('Task Manager'),
         actions: [
           IconButton(
-            icon: Icon(Icons.export),
+            icon: Icon(Icons.file_download),
             onPressed: _showExportDialog,
           ),
         ],
