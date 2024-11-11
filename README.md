@@ -2,8 +2,8 @@
 # Task Manager App
 
 This is a Flutter-based task manager app that allows users to add, edit, mark as completed, and export tasks to a PDF file. The app also supports notifications for tasks scheduled for today and the ability to toggle between dark and light themes. Users can filter tasks based on categories like "Today", "Favorites", "Repeated", and "Completed".
-![WhatsApp Image 2024-11-10 at 23 08 16_9b3d2f86](https://github.com/user-attachments/assets/bc526eae-b8cd-43dc-9f56-4a10e16c7767)
 
+<img width="960" alt="f" src="https://github.com/user-attachments/assets/49d06438-5ce9-49c9-8176-c3377326addd">
 
 https://github.com/user-attachments/assets/37b6463a-434b-4c5a-8d79-4381c134d7ed
 
