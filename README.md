@@ -171,7 +171,7 @@ flutter:
 
 3. If you're using a custom font with `google_fonts`, ensure the dependency is installed correctly and the app has access to the internet for font loading.
 
-## Acknowledgments
+## Acknowledgments/Reference
 
 This app was developed with the help of **ChatGPT**, an AI language model created by **OpenAI**. The code, ideas, and implementation of various features, including the PDF export functionality, were assisted by ChatGPT.
 
